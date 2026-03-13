@@ -1,0 +1,5 @@
+# Set the default behavior to handle all files as text and force LF
+* text eol=lf
+
+# Explicitly set weights for binary files so that they aren't corrupted
+*.so  binary

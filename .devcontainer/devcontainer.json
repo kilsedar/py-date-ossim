@@ -1,0 +1,17 @@
+{
+    "name": "OSSIM Container",
+    "image": "ossim:0.2",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "twxs.cmake"
+            ]
+        }
+    },
+    "postCreateCommand": "apt-get install -y python3 python3-pip && pip3 install \"pybind11[global]\" --break-system-packages",
+     "mounts":[
+        "source=D:/PoliTO/work/projects/DSM/odc_data,target=/opt/data/ossim,type=bind"
+    ]
+}

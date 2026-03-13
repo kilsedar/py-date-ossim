@@ -1,0 +1,8 @@
+c++ -O3 -Wall -Wno-overloaded-virtual -shared -std=c++14 -fPIC \
+    $(python3 -m pybind11 --includes) \
+    -I/usr/local/src/ossim/include \
+    ossim_wrapper.cpp \
+    -o ossim_wrapper$(python3 -m pybind11 --extension-suffix) \
+    -L/usr/local/src/build/lib \
+    -lossim \
+    -Wl,-rpath,/usr/local/src/build/lib

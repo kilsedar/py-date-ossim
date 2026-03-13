@@ -1,0 +1,13 @@
+3 
+0 /opt/data/ossim/input/DIM_PHR1A_P_201208281023018_SEN_1299536101-001.XML orbit
+1 /opt/data/ossim/input/DIM_PHR1A_P_201208281022159_SEN_1299536101-002.XML orbit
+2 /opt/data/ossim/input/DIM_PHR1A_P_201208281022063_SEN_1299536101-003.XML orbit
+
+3 
+0 1
+1 2
+0 2
+
+0 1
+1 2
+0 2
