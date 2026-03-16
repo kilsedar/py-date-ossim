@@ -1,2 +1,1 @@
-OLD: python3 main.py /output dsm.tif 1 images/IMG_PHR1A_P_201208281023018_SEN_1299536101-001_R1C1.TIF images/IMG_PHR1A_P_201208281022159_SEN_1299536101-002_R1C1.TIF --cut-bbox-ll 46.03160678 46.09522479 11.06858452 11.15119117 --meters 5
-NEW: python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm.tif --number-steps 1 --cut-bbox-ll 46.03160678 46.09522479 11.06858452 11.15119117 --meters 5
+python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm.tif --number-steps 1 --cut-bbox-ll 46.03160678 46.09522479 11.06858452 11.15119117 --meters 5

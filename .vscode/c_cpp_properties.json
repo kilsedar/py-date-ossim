@@ -3,8 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
-                "/usr/local/src/ossim/include/**",
+                "/usr/local/src/ossim/include",
                 "/usr/include/python3.12/"
             ],
             "defines": [],
