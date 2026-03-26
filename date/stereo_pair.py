@@ -53,9 +53,9 @@ class StereoPair:
         height = image_size.y    
         print(f"Master image dimensions: {width} x {height}")
 
-        delta_I = image_size.x / (grid +1)
+        delta_I = image_size.x // (grid +1)
         print(f"delta I: {delta_I}")
-        delta_J = image_size.y / (grid +1)
+        delta_J = image_size.y // (grid +1)
         print(f"delta J: {delta_J}")
 
         epipolar_direction_logs = open("date/logs/epipolar_direction.txt", "w")
