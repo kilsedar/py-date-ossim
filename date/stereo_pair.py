@@ -28,6 +28,9 @@ class StereoPair:
         self.ortho_slave_path = value_2
 
     def epipolar_direction(self):
+        """
+        Calculate mean rotation angle (epipolar direction) and mean conversion factor
+        """
         print("EPIPOLAR DIRECTION COMPUTATION")
 
         grid = 10
@@ -51,9 +54,9 @@ class StereoPair:
         print(f"Master image dimensions: {width} x {height}")
 
         delta_I = image_size.x // (grid +1)
-        print(f"delta I: {delta_I}")
+        print(f"Delta I: {delta_I}")
         delta_J = image_size.y // (grid +1)
-        print(f"delta J: {delta_J}")
+        print(f"Delta J: {delta_J}")
 
         epipolar_direction_logs = open("date/logs/epipolar_direction.txt", "w")
         angles = []

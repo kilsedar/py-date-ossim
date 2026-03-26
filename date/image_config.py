@@ -15,7 +15,7 @@ class ImageConfig:
 
     def calculate_bbox_from_images(self, image_file_paths):
         """
-        Finds the intersection of all images in latitude and longitude
+        Find the intersection of all images in latitude and longitude
         """
         min_lat, max_lat = float('-inf'), float('inf')
         min_lon, max_lon = float('-inf'), float('inf')
@@ -25,19 +25,19 @@ class ImageConfig:
         for path in image_file_paths:
             handler = registry.open(path)
             if not handler:
-                print(f"Warning: {path} cannot be opened")
+                print(f"Warning: {path} cannot be opened.")
                 continue
             
             geom = handler.getImageGeometry()
             if not geom:
-                print(f"Warning: no geometry for {path}")
+                print(f"Warning: No geometry for {path}")
                 continue
             
             # Use the custom C++ lambda binding to get the rectangle
             image_rect = geom.getGroundBoundingRect()
 
             if image_rect.hasNans():
-                print(f"Warning: image {path} has invalid bounds")
+                print(f"Warning: Image {path} has invalid bounds.")
                 continue
 
             min_lat = max(min_lat, image_rect.ll.lat)

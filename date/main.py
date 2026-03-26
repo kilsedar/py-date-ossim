@@ -23,12 +23,12 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    # Fixed Arguments
+    # Fixed arguments
     parser.add_argument('input_filename', type=str, help="Input images configuration text file")
     parser.add_argument('output_dir', type=str, help="Output directory path")
     parser.add_argument('output_filename', type=str, help="Output filename")
 
-    # Optional Arguments (Flags)
+    # Optional arguments (flags)
     parser.add_argument('--number-steps', type=int, default=1, help="Number of steps for pyramidal processing")
     parser.add_argument('--meters', type=float, default=5.0, help="Grid spacing in meters")
     parser.add_argument('--cut-bbox-ll', nargs=4, type=float, metavar=('min_lat', 'max_lat', 'min_lon', 'max_lon'), help="Bounding box coordinates") 
