@@ -25,7 +25,7 @@ class ImageConfig:
         for path in image_file_paths:
             handler = registry.open(path)
             if not handler:
-                print(f"Warning: could not open {path}")
+                print(f"Warning: {path} cannot be opened")
                 continue
             
             geom = handler.getImageGeometry()

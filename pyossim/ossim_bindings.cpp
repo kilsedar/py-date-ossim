@@ -15,7 +15,6 @@
 #include <ossim/imaging/ossimImageGeometry.h>
 
 #include <ossim/projection/ossimUtmpt.h>
-#include <ossim/projection/ossimUtmProjection.h>
 #include <ossim/util/ossimChipperUtil.h>
 #include <ossim/elevation/ossimElevManager.h>
 
@@ -69,14 +68,14 @@ PYBIND11_MODULE(pyossim, m) {
     // Bind ossimIpt: 2D integer point (used for discrete pixel coordinates and image grid dimensions)
     py::class_<ossimIpt>(m, "ossimIpt")
         .def(py::init<int, int>(), py::arg("x")=0, py::arg("y")=0)
-        .def_readwrite("x", &ossimIpt::x) // def_readwrite lets you access public member variables in Python (read and write access)
+        .def_readwrite("x", &ossimIpt::x) // def_readwrite lets access to public member variables in Python (read and write access)
         .def_readwrite("y", &ossimIpt::y)
         .def("__repr__", [](const ossimIpt& p) {
             return "Width: " + std::to_string(p.x) + ", Height: " + std::to_string(p.y);
         });
 
 
-    // Bind ossimDpt: 2D double point (used for sub-pixel accuracy and PCS coordinates (e.g., in easting and northing)
+    // Bind ossimDpt: 2D double point (used for sub-pixel accuracy and PCS coordinates (e.g., in easting and northing))
     py::class_<ossimDpt>(m, "ossimDpt")
         .def(py::init<double, double>(), py::arg("x")=0.0, py::arg("y")=0.0)
         .def_readwrite("x", &ossimDpt::x)
@@ -110,12 +109,12 @@ PYBIND11_MODULE(pyossim, m) {
 
     // Bind ossimGrect (ground rectangle)
     py::class_<ossimGrect>(m, "ossimGrect")
-        .def(py::init<ossimGpt, ossimGpt>()) // lower-left, upper-right
+        .def(py::init<ossimGpt, ossimGpt>()) 
         .def("hasNans", &ossimGrect::hasNans)
-        .def_property_readonly("ll", [](const ossimGrect& self) { return self.ll(); })
-        .def_property_readonly("ur", [](const ossimGrect& self) { return self.ur(); })
+        .def_property_readonly("ll", [](const ossimGrect& self) { return self.ll(); }) // ll: lower-left
+        .def_property_readonly("ur", [](const ossimGrect& self) { return self.ur(); }) // ur: upper-right
         .def("__repr__", [](const ossimGrect& r) {
-            return "Rect[LL (lat, lon): " + std::to_string(r.ll().latd()) + ", " + std::to_string(r.ll().lond()) + " | UR (lat, lon): " + std::to_string(r.ur().latd()) + ", " + std::to_string(r.ur().lond()) + "]";
+            return "Rectangle LL (lat, lon): " + std::to_string(r.ll().latd()) + ", " + std::to_string(r.ll().lond()) + " | UR (lat, lon): " + std::to_string(r.ur().latd()) + ", " + std::to_string(r.ur().lond());
         });
 
 
@@ -150,7 +149,7 @@ PYBIND11_MODULE(pyossim, m) {
             
             // Fetch the four corners of the image in latitude and longitude
             if (self.getCornerGpts(ul, ur, lr, ll)) {
-                // Create an ossimGrect using the four corners
+                // Create an ossimGrect object using the four corners
                 return ossimGrect(ul, ur, lr, ll);
             }
             
