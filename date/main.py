@@ -3,6 +3,7 @@ import argparse
 
 import pyossim
 
+from .image_config import ImageConfig
 from .raw_image import RawImage
 from .stereo_pair import StereoPair
 
@@ -10,31 +11,16 @@ from .stereo_pair import StereoPair
 def main():
     pyossim.init()
 
-    # Constants
-    CUT_MIN_LAT_KW = 'cut_min_lat'
-    CUT_MAX_LAT_KW = 'cut_max_lat'
-    CUT_MIN_LON_KW = 'cut_min_lon'
-    CUT_MAX_LON_KW = 'cut_max_lon'
-    METERS_KW = 'meters'
-    OP_KW  = 'operation'
-    RESAMPLER_FILTER_KW = 'resampler_filter'
-    PROJECTION_KW = 'projection'
-
-
     # Check if the number of arguments passed is less than 4 (the minimum expected)
     if len(sys.argv) < 4: 
         print("ERROR: Few arguments... At least 5 arguments are expected!")
         print("Usage: main.py <configuration_file> <output_results_directory> <output_dsm_name>")
         print("Options:")
         print("--number-steps <number_steps> ===> Specify the number of steps for pyramidal processing.")
-        print("--cut-bbox-ll <min_lat> <max_lat> <min_lon> <max_lon> ===> Specify a bounding box with the minimum and maximum latitude and longitude in decimal degrees.")
         print("--meters <meters> ===> Specify a size in meters for resampling.")
+        print("--cut-bbox-ll <min_lat> <max_lat> <min_lon> <max_lon> ===> Specify a bounding box with the minimum and maximum latitude and longitude in decimal degrees.")
         sys.exit(1)
 
-
-    ###################################################################
-    ################## BEGINNING OF ARGUMENT PARSING ##################
-    ###################################################################
     parser = argparse.ArgumentParser()
 
     # Fixed Arguments
@@ -44,46 +30,11 @@ def main():
 
     # Optional Arguments (Flags)
     parser.add_argument('--number-steps', type=int, default=1, help="Number of steps for pyramidal processing")
-    parser.add_argument('--cut-bbox-ll', nargs=4, type=float, metavar=('min_lat', 'max_lat', 'min_lon', 'max_lon'), help="Bounding box coordinates")
     parser.add_argument('--meters', type=float, default=5.0, help="Grid spacing in meters")
+    parser.add_argument('--cut-bbox-ll', nargs=4, type=float, metavar=('min_lat', 'max_lat', 'min_lon', 'max_lon'), help="Bounding box coordinates") 
 
     args = parser.parse_args()
     print(f"\nArguments: {args}\n")
-
-    image_key = {}
-
-    number_steps = args.number_steps
-    print(f"Number of steps for pyramidal: {number_steps}\n")
-
-    image_key[METERS_KW] = args.meters
-    print(f"Orthoimages resolution: {args.meters} meters\n")
-
-    # Minimum and maximum latitude and longitude computation for the tile defined by the provided bounding box
-    # This is never used...
-    if args.cut_bbox_ll:
-        min_lat, max_lat, min_lon, max_lon = args.cut_bbox_ll
-
-        print(f"Tile extent:\tmin_lat = {min_lat}\n" + f"\t\tmax_lat = {max_lat}\n" + f"\t\tmin_lon = {min_lon}\n" + f"\t\tmax_lon = {max_lon}\n")
-
-        min_height, max_height = pyossim.get_tile_min_max_elevation(min_lat, max_lat, min_lon, max_lon, 0.001)
-
-        print(f"Minimum height for this tile: {min_height:.6g} m")
-        print(f"Maximum height for this tile: {max_height:.6g} m\n")
-
-    # Default keyword for orthorectification
-    image_key[OP_KW] = 'ortho'
-
-    # Resampling filter 
-    image_key[RESAMPLER_FILTER_KW] = 'box'
-
-    # Output DSM projection
-    image_key[PROJECTION_KW] = 'utm'
-
-    print(f"{image_key}\n")
-    #############################################################
-    ################## END OF ARGUMENT PARSING ##################
-    #############################################################
-
 
     # Read the input images configuration text file
     try:
@@ -117,11 +68,23 @@ def main():
         idx += 3
 
         image = RawImage(raw_image_id=id, raw_image_path=file_path, orbit=orbit)
-        images_list.append(image)    
+        images_list.append(image)
 
         print(f"Id: {id}")
         print(f"Path: {file_path}")
         print(f"Orbit: {orbit}")
+
+    configuration = ImageConfig(
+        meters = args.meters or 2.0,
+        number_steps = args.number_steps or 2
+    )
+
+    if args.cut_bbox_ll:
+        configuration.min_lat, configuration.max_lat, configuration.min_lon, configuration.max_lon = args.cut_bbox_ll
+    else:
+        configuration.calculate_bbox_from_images([image.raw_image_path for image in images_list])
+
+    print(f"\nImage configuration: {configuration}")
 
     # Read pairs
     pairs_number = int(tokens[idx])

@@ -1,1 +1,1 @@
-python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm.tif --number-steps 1 --cut-bbox-ll 46.03160678 46.09522479 11.06858452 11.15119117 --meters 5
+python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm.tif --number-steps 2 --meters 2 --cut-bbox-ll 46.03160678 46.09522479 11.06858452 11.15119117

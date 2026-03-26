@@ -8,12 +8,14 @@
 #include <ossim/base/ossimKeywordlist.h> 
 #include <ossim/base/ossimGpt.h>
 #include <ossim/base/ossimIpt.h>
+#include <ossim/base/ossimGrect.h>
 
 #include <ossim/imaging/ossimImageHandlerRegistry.h>
 #include <ossim/imaging/ossimImageHandler.h>
 #include <ossim/imaging/ossimImageGeometry.h>
 
 #include <ossim/projection/ossimUtmpt.h>
+#include <ossim/projection/ossimUtmProjection.h>
 #include <ossim/util/ossimChipperUtil.h>
 #include <ossim/elevation/ossimElevManager.h>
 
@@ -21,6 +23,7 @@
 namespace py = pybind11;
 
 
+// This function is not used 
 py::tuple get_tile_min_max_elevation(double min_lat, double max_lat, double min_lon, double max_lon, double step = 0.001) {
     ossimInit::instance()->initialize();
     
@@ -63,55 +66,57 @@ PYBIND11_MODULE(pyossim, m) {
     });
 
 
-    // Bind ossimIpt (integer point for image / pixel dimensions)
+    // Bind ossimIpt: 2D integer point (used for discrete pixel coordinates and image grid dimensions)
     py::class_<ossimIpt>(m, "ossimIpt")
         .def(py::init<int, int>(), py::arg("x")=0, py::arg("y")=0)
-
-        .def_readwrite("x", &ossimIpt::x)
-
+        .def_readwrite("x", &ossimIpt::x) // def_readwrite lets you access public member variables in Python (read and write access)
         .def_readwrite("y", &ossimIpt::y)
-
         .def("__repr__", [](const ossimIpt& p) {
             return "Width: " + std::to_string(p.x) + ", Height: " + std::to_string(p.y);
         });
 
 
-    // Bind ossimDpt (double point for local / image / pixel coordinates)
+    // Bind ossimDpt: 2D double point (used for sub-pixel accuracy and PCS coordinates (e.g., in easting and northing)
     py::class_<ossimDpt>(m, "ossimDpt")
         .def(py::init<double, double>(), py::arg("x")=0.0, py::arg("y")=0.0)
-
         .def_readwrite("x", &ossimDpt::x)
-
         .def_readwrite("y", &ossimDpt::y)
-
         .def("__repr__", [](const ossimDpt& p) {
             return "X: " + std::to_string(p.x) + ", Y: " + std::to_string(p.y);
         });
 
 
-    // Bind ossimGpt (double point for world / ground coordinates)
+    // Bind ossimGpt: 3D double point (used for GCS coordinates)
     py::class_<ossimGpt>(m, "ossimGpt")
         .def(py::init<double, double, double>(), py::arg("lat")=0.0, py::arg("lon")=0.0, py::arg("height")=0.0)
-
         .def_readwrite("lat", &ossimGpt::lat)
-
         .def_readwrite("lon", &ossimGpt::lon)
-
         .def_readwrite("height", &ossimGpt::hgt)
-
         .def("__repr__", [](const ossimGpt& p) {
             return "Latitude: " + std::to_string(p.lat) + ", Longitude: " + std::to_string(p.lon) +  ", Height: " + std::to_string(p.hgt);
         });
 
 
     py::class_<ossimUtmpt>(m, "ossimUtmpt")
-        .def(py::init<const ossimGpt&>())
+        .def(py::init<const ossimGpt&>()) 
+        .def_property_readonly("easting", &ossimUtmpt::easting) // def_property_readonly makes a function look like a variable in Python (only read access)
+        .def_property_readonly("northing", &ossimUtmpt::northing)
+        .def_property_readonly("zone", &ossimUtmpt::zone)
+        .def_property_readonly("hemisphere", &ossimUtmpt::hemisphere) // 'N' or 'S'
+        .def("__repr__", [](const ossimUtmpt& p) {
+            return "UTM " + std::to_string(p.zone()) + std::string(1, p.hemisphere()) + " E: " + std::to_string(p.easting()) + " N: " + std::to_string(p.northing());
+        });
 
-        .def("easting", &ossimUtmpt::easting)
 
-        .def("northing", &ossimUtmpt::northing)
-        
-        .def("zone", &ossimUtmpt::zone);
+    // Bind ossimGrect (ground rectangle)
+    py::class_<ossimGrect>(m, "ossimGrect")
+        .def(py::init<ossimGpt, ossimGpt>()) // lower-left, upper-right
+        .def("hasNans", &ossimGrect::hasNans)
+        .def_property_readonly("ll", [](const ossimGrect& self) { return self.ll(); })
+        .def_property_readonly("ur", [](const ossimGrect& self) { return self.ur(); })
+        .def("__repr__", [](const ossimGrect& r) {
+            return "Rect[LL (lat, lon): " + std::to_string(r.ll().latd()) + ", " + std::to_string(r.ll().lond()) + " | UR (lat, lon): " + std::to_string(r.ur().latd()) + ", " + std::to_string(r.ur().lond()) + "]";
+        });
 
 
     py::class_<ossimImageGeometry, ossimRefPtr<ossimImageGeometry>>(m, "ossimImageGeometry")
@@ -138,7 +143,20 @@ PYBIND11_MODULE(pyossim, m) {
             ossimGpt worldPt;
             self.localToWorld(localPt, worldPt);
             return worldPt;
-        }, py::arg("local_point"), "Convert local (x, y) to world (latitude, longitude, height) coordinates using default elevation");
+        }, py::arg("local_point"), "Convert local (x, y) to world (latitude, longitude, height) coordinates using default elevation")
+
+        .def("getGroundBoundingRect", [](const ossimImageGeometry& self) {
+            ossimGpt ul, ur, lr, ll;
+            
+            // Fetch the four corners of the image in latitude and longitude
+            if (self.getCornerGpts(ul, ur, lr, ll)) {
+                // Create an ossimGrect using the four corners
+                return ossimGrect(ul, ur, lr, ll);
+            }
+            
+            // Fallback: return an empty rectangle if corners cannot be calculated
+            return ossimGrect();
+        });
     
 
     py::class_<ossimImageHandler, ossimRefPtr<ossimImageHandler>>(m, "ossimImageHandler")

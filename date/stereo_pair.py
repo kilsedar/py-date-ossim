@@ -9,10 +9,8 @@ class StereoPair:
     id_slave: int = 0
     raw_master_path: str = ""
     raw_slave_path: str = ""
-    # These two may need to be removed
     ortho_master_path: str = ""
     ortho_slave_path: str = ""
-    # This may need to be calculated 
     delta_height: float = 0.0
     mean_rotation_angle: float = 0.0
     mean_conversion_factor: float = 0.0
@@ -25,7 +23,6 @@ class StereoPair:
         self.raw_master_path = value_1
         self.raw_slave_path = value_2
 
-    # This may need to be removed
     def set_ortho_paths(self, value_1: str, value_2: str):
         self.ortho_master_path = value_1
         self.ortho_slave_path = value_2
@@ -80,11 +77,11 @@ class StereoPair:
                 utm_ground_point_master_up = pyossim.ossimUtmpt(ground_point_master_up)
                 utm_ground_point_slave_up = pyossim.ossimUtmpt(ground_point_slave_up)
 
-                epipolar_direction_logs.write(f"{utm_ground_point_master_up.easting():.12f} {utm_ground_point_master_up.northing():.12f} {utm_ground_point_slave_up.easting():.12f} {utm_ground_point_slave_up.northing():.12f}\n")
+                epipolar_direction_logs.write(f"{utm_ground_point_master_up.easting:.12f} {utm_ground_point_master_up.northing:.12f} {utm_ground_point_slave_up.easting:.12f} {utm_ground_point_slave_up.northing:.12f}\n")
 
                 # Calculate easting and northing differences in meters
-                difference_easting = utm_ground_point_slave_up.easting() - utm_ground_point_master_up.easting()
-                difference_northing = utm_ground_point_slave_up.northing() - utm_ground_point_master_up.northing()
+                difference_easting = utm_ground_point_slave_up.easting - utm_ground_point_master_up.easting
+                difference_northing = utm_ground_point_slave_up.northing - utm_ground_point_master_up.northing
                 
                 # Rotation angle calculation
                 rotation_angle = math.atan2(difference_northing, difference_easting) * 180 / math.pi
