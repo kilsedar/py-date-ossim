@@ -195,7 +195,7 @@ PYBIND11_MODULE(pyossim, m) {
         });      
         
 
-    m.def("get_tile_min_max_elevation", &get_tile_min_max_elevation, py::arg("min_lat"), py::arg("max_lat"), py::arg("min_lon"), py::arg("max_lon"), py::arg("step")=0.001, "Calculate minimum and maximum elevation for a given bounding box");
+    m.def("get_tile_min_max_elevation", &get_tile_min_max_elevation, py::arg("min_lat"), py::arg("max_lat"), py::arg("min_lon"), py::arg("max_lon"), py::arg("step")=0.001, "Calculate minimum and maximum elevation for a given extent");
 
         
     /* py::class_<ossimElevManager>(m, "ossimElevManager")

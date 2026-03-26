@@ -18,7 +18,7 @@ def main():
         print("Options:")
         print("--number-steps <number_steps> ===> Specify the number of steps for pyramidal processing.")
         print("--meters <meters> ===> Specify a size in meters for resampling.")
-        print("--cut-bbox-ll <min_lat> <max_lat> <min_lon> <max_lon> ===> Specify a bounding box with the minimum and maximum latitude and longitude in decimal degrees.")
+        print("--cut-extent-ll <min_lat> <max_lat> <min_lon> <max_lon> ===> Specify an extent with the minimum and maximum latitude and longitude in decimal degrees.")
         sys.exit(1)
 
     parser = argparse.ArgumentParser()
@@ -31,7 +31,7 @@ def main():
     # Optional arguments (flags)
     parser.add_argument('--number-steps', type=int, default=1, help="Number of steps for pyramidal processing")
     parser.add_argument('--meters', type=float, default=5.0, help="Grid spacing in meters")
-    parser.add_argument('--cut-bbox-ll', nargs=4, type=float, metavar=('min_lat', 'max_lat', 'min_lon', 'max_lon'), help="Bounding box coordinates") 
+    parser.add_argument('--cut-extent-ll', nargs=4, type=float, metavar=('min_lat', 'max_lat', 'min_lon', 'max_lon'), help="Extent coordinates") 
 
     args = parser.parse_args()
     print(f"\nArguments: {args}\n")
@@ -79,10 +79,10 @@ def main():
         number_steps = args.number_steps or 2
     )
 
-    if args.cut_bbox_ll:
-        configuration.min_lat, configuration.max_lat, configuration.min_lon, configuration.max_lon = args.cut_bbox_ll
+    if args.cut_extent_ll:
+        configuration.min_lat, configuration.max_lat, configuration.min_lon, configuration.max_lon = args.cut_extent_ll
     else:
-        configuration.calculate_bbox_from_images([image.raw_image_path for image in images_list])
+        configuration.calculate_extent_from_images([image.raw_image_path for image in images_list])
 
     print(f"\nImage configuration: {configuration}")
 

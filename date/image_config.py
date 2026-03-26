@@ -13,7 +13,7 @@ class ImageConfig:
     resampler_filter: str = 'box'
     projection: str = 'utm'
 
-    def calculate_bbox_from_images(self, image_file_paths):
+    def calculate_extent_from_images(self, image_file_paths):
         """
         Find the intersection of all images in latitude and longitude
         """
