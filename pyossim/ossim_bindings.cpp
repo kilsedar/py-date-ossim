@@ -6,9 +6,9 @@
 
 #include <ossim/base/ossimFilename.h>
 #include <ossim/base/ossimKeywordlist.h> 
-#include <ossim/base/ossimGpt.h>
 #include <ossim/base/ossimIpt.h>
-#include <ossim/base/ossimGrect.h>
+#include <ossim/base/ossimGpt.h>
+#include <ossim/base/ossimIrect.h>
 
 #include <ossim/imaging/ossimImageHandlerRegistry.h>
 #include <ossim/imaging/ossimImageHandler.h>
@@ -107,14 +107,15 @@ PYBIND11_MODULE(pyossim, m) {
         });
 
 
-    // Bind ossimGrect (ground rectangle)
-    py::class_<ossimGrect>(m, "ossimGrect")
-        .def(py::init<ossimGpt, ossimGpt>()) 
-        .def("hasNans", &ossimGrect::hasNans)
-        .def_property_readonly("ll", [](const ossimGrect& self) { return self.ll(); }) // ll: lower-left
-        .def_property_readonly("ur", [](const ossimGrect& self) { return self.ur(); }) // ur: upper-right
-        .def("__repr__", [](const ossimGrect& r) {
-            return "Rectangle LL (lat, lon): " + std::to_string(r.ll().latd()) + ", " + std::to_string(r.ll().lond()) + " | UR (lat, lon): " + std::to_string(r.ur().latd()) + ", " + std::to_string(r.ur().lond());
+    // Bind ossimIrect: rectangle in pixel space
+    py::class_<ossimIrect>(m, "ossimIrect")
+        .def(py::init<int, int, int, int>()) // ul_x, ul_y, lr_x, lr_y
+        .def("width", &ossimIrect::width)
+        .def("height", &ossimIrect::height)
+        .def("ul", &ossimIrect::ul) // Return ossimIpt (upper-left)
+        .def("lr", &ossimIrect::lr) // Return ossimIpt (lower-right)
+        .def("__repr__", [](const ossimIrect& r) {
+            return "Width: " + std::to_string(r.width()) + ", Height: " + std::to_string(r.height());
         });
 
 
@@ -142,24 +143,12 @@ PYBIND11_MODULE(pyossim, m) {
             ossimGpt worldPt;
             self.localToWorld(localPt, worldPt);
             return worldPt;
-        }, py::arg("local_point"), "Convert local (x, y) to world (latitude, longitude, height) coordinates using default elevation")
-
-        .def("getGroundBoundingRect", [](const ossimImageGeometry& self) {
-            ossimGpt ul, ur, lr, ll;
-            
-            // Fetch the four corners of the image in latitude and longitude
-            if (self.getCornerGpts(ul, ur, lr, ll)) {
-                // Create an ossimGrect object using the four corners
-                return ossimGrect(ul, ur, lr, ll);
-            }
-            
-            // Fallback: return an empty rectangle if corners cannot be calculated
-            return ossimGrect();
-        });
+        }, py::arg("local_point"), "Convert local (x, y) to world (latitude, longitude, height) coordinates using default elevation");
     
 
     py::class_<ossimImageHandler, ossimRefPtr<ossimImageHandler>>(m, "ossimImageHandler")
-        .def("getImageGeometry", &ossimImageHandler::getImageGeometry, "Return the image geometry object");
+        .def("getImageGeometry", &ossimImageHandler::getImageGeometry, "Return the image geometry object")
+        .def("getBoundingRect", &ossimImageHandler::getBoundingRect, py::arg("res_level")=0, "Return the bounding rectangle in pixel space");
 
 
     py::class_<ossimImageHandlerRegistry>(m, "ossimImageHandlerRegistry")
