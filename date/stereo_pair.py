@@ -15,17 +15,21 @@ class StereoPair:
     mean_rotation_angle: float = 0.0
     mean_conversion_factor: float = 0.0
 
+
     def set_ids(self, value_1: int, value_2: int):
         self.id_master = value_1
         self.id_slave = value_2
+
 
     def set_raw_paths(self, value_1: str, value_2: str):
         self.raw_master_path = value_1
         self.raw_slave_path = value_2
 
+
     def set_ortho_paths(self, value_1: str, value_2: str):
         self.ortho_master_path = value_1
         self.ortho_slave_path = value_2
+        
 
     def epipolar_direction(self):
         """
@@ -38,17 +42,17 @@ class StereoPair:
         maximum_height= 1000.0
         self.delta_height = maximum_height - minimum_height
 
-        registry = pyossim.ossimImageHandlerRegistry.instance()
+        registry = pyossim.ossim_image_handler_registry.instance()
         raw_master_handler = registry.open(self.raw_master_path)
         raw_slave_handler = registry.open(self.raw_slave_path)
 
         if not raw_master_handler or not raw_slave_handler:
             raise RuntimeError("Image files cannot be opened.")
 
-        raw_master_geom = raw_master_handler.getImageGeometry()
-        raw_slave_geom = raw_slave_handler.getImageGeometry()
+        raw_master_geom = raw_master_handler.get_image_geometry()
+        raw_slave_geom = raw_slave_handler.get_image_geometry()
 
-        image_size = raw_master_geom.getImageSize()        
+        image_size = raw_master_geom.get_image_size()        
         width = image_size.x
         height = image_size.y    
         print(f"Master image dimensions: {width} x {height}")
@@ -66,21 +70,21 @@ class StereoPair:
 
         for i in range(1, grid + 1): # Columns (x-axis in image)
             for j in range(1, grid + 1): # Rows (y-axis in image)
-                image_point_master = pyossim.ossimDpt(delta_I*i, delta_J*j)
+                image_point_master = pyossim.ossim_dpt(delta_I*i, delta_J*j)
                 # print(f"Image point master: {image_point_master}")
-                ground_point_master_up = raw_master_geom.localToWorld(image_point_master, maximum_height)
-                ground_point_master_down = raw_master_geom.localToWorld(image_point_master, minimum_height)
+                ground_point_master_up = raw_master_geom.local_to_world(image_point_master, maximum_height)
+                ground_point_master_down = raw_master_geom.local_to_world(image_point_master, minimum_height)
                 # print(f"Ground point master: {ground_point_master_up}")
                 # print(f"Ground point down: {ground_point_master_down}")
 
                 # Once I've computed the lowest point on the ground, I go to the slave's image plane
-                image_point_slave_down = raw_slave_geom.worldToLocal(ground_point_master_down)
+                image_point_slave_down = raw_slave_geom.world_to_local(ground_point_master_down)
                 # From the slave's image plane, I go to the highest point on the ground
-                ground_point_slave_up = raw_slave_geom.localToWorld(image_point_slave_down, maximum_height)
+                ground_point_slave_up = raw_slave_geom.local_to_world(image_point_slave_down, maximum_height)
 
                 # Geographic --> UTM conversion
-                utm_ground_point_master_up = pyossim.ossimUtmpt(ground_point_master_up)
-                utm_ground_point_slave_up = pyossim.ossimUtmpt(ground_point_slave_up)
+                utm_ground_point_master_up = pyossim.ossim_utmpt(ground_point_master_up)
+                utm_ground_point_slave_up = pyossim.ossim_utmpt(ground_point_slave_up)
 
                 epipolar_direction_logs.write(f"{utm_ground_point_master_up.easting:.12f} {utm_ground_point_master_up.northing:.12f} {utm_ground_point_slave_up.easting:.12f} {utm_ground_point_slave_up.northing:.12f}\n")
 

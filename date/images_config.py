@@ -8,16 +8,13 @@ from shapely.geometry import Polygon
 import pyossim
 
 @dataclass
-class ImageConfig:
+class ImagesConfig:
     number_steps: int = 2
-    meters: float = 2.0
+    meters: float = 1.0
     min_lat: float = 0.0
     max_lat: float = 0.0
     min_lon: float = 0.0
     max_lon: float = 0.0
-    operation: str = 'ortho'
-    resampler_filter: str = 'box'
-    projection: str = 'utm'
 
 
     @staticmethod
@@ -26,6 +23,7 @@ class ImageConfig:
         polygon: Shapely polygon in latitude and longitude (EPSG:4326)
         meters: distance to shrink inward (positive number)
         """
+        
         # The UTM zone is defined according to Trento
         project_to_meters = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True).transform        
         project_to_degrees = pyproj.Transformer.from_crs("EPSG:32632", "EPSG:4326", always_xy=True).transform
@@ -52,7 +50,7 @@ class ImageConfig:
         Find the intersection of all images in latitude and longitude, shrink the intersection by the preferred amount of meters, and then calculate the bounding box of the resulting polygon
         """
 
-        registry = pyossim.ossimImageHandlerRegistry.instance()
+        registry = pyossim.ossim_image_handler_registry.instance()
         image_polygons = []
 
         for path in image_file_paths:
@@ -73,10 +71,10 @@ class ImageConfig:
             # Define the 4 corners of the polygon corresponding to the image in pixel space (ossimDpt)
             # ul=(0,0), ur=(w,0), lr=(w,h), ll=(0,h)
             corners_pixels = [
-                pyossim.ossimDpt(0, 0),
-                pyossim.ossimDpt(width, 0),
-                pyossim.ossimDpt(width, height),
-                pyossim.ossimDpt(0, height)
+                pyossim.ossim_dpt(0, 0),
+                pyossim.ossim_dpt(width, 0),
+                pyossim.ossim_dpt(width, height),
+                pyossim.ossim_dpt(0, height)
             ]
 
             # Convert each pixel to a world point (ossimGpt)

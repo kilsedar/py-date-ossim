@@ -1,11 +1,32 @@
 import sys
 import argparse
+import os
+import time
 
 import pyossim
 
-from .image_config import ImageConfig
+from .images_config import ImagesConfig
 from .raw_image import RawImage
 from .stereo_pair import StereoPair
+from .disparity_merging import DisparityMerging
+
+
+def ortho(kwl_dict: dict) -> bool:
+    chipper = pyossim.ossim_chipper_util()
+    chipper.initialize(kwl_dict) # The pybind11 function automatically converts the dictionary to an ossimKeywordList!
+
+    start_time = time.perf_counter()
+
+    try:
+        chipper.execute() # Execute the orthorectification        
+
+        elapsed_time = time.perf_counter() - start_time
+        print(f"Elapsed time in seconds: {elapsed_time:.3f}\n")        
+    except RuntimeError as e:
+        print(f"OSSIM exception: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    return True
 
 
 def main():
@@ -24,21 +45,21 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Fixed arguments
-    parser.add_argument('input_filename', type=str, help="Input images configuration text file")
-    parser.add_argument('output_dir', type=str, help="Output directory path")
-    parser.add_argument('output_filename', type=str, help="Output filename")
+    parser.add_argument("input_filename", type=str, help="Input images configuration text file")
+    parser.add_argument("output_dir", type=str, help="Output directory path")
+    parser.add_argument("output_filename", type=str, help="Output filename")
 
     # Optional arguments (flags)
-    parser.add_argument('--number-steps', type=int, default=1, help="Number of steps for pyramidal processing")
-    parser.add_argument('--meters', type=float, default=5.0, help="Grid spacing in meters")
-    parser.add_argument('--cut-extent-ll', nargs=4, type=float, metavar=('min_lat', 'max_lat', 'min_lon', 'max_lon'), help="Extent coordinates") 
+    parser.add_argument("--number-steps", type=int, default=1, help="Number of steps for pyramidal processing")
+    parser.add_argument("--meters", type=float, default=5.0, help="Grid spacing in meters")
+    parser.add_argument("--cut-extent-ll", nargs=4, type=float, metavar=("min_lat", "max_lat", "min_lon", "max_lon"), help="Extent coordinates") 
 
     args = parser.parse_args()
     print(f"\nArguments: {args}\n")
 
     # Read the input images configuration text file
     try:
-        f_input = open(args.input_filename, 'r')
+        f_input = open(args.input_filename, "r")
     except FileNotFoundError:
         print("Missing input file")
         sys.exit(1)
@@ -74,8 +95,8 @@ def main():
         print(f"Path: {file_path}")
         print(f"Orbit: {orbit}")
 
-    configuration = ImageConfig(
-        meters = args.meters or 2.0,
+    configuration = ImagesConfig(
+        meters = args.meters or 1.0,
         number_steps = args.number_steps or 2
     )
 
@@ -84,7 +105,7 @@ def main():
     else:
         configuration.calculate_extent_from_images([image.raw_image_path for image in images_list])
 
-    print(f"\nImage configuration: {configuration}")
+    print(f"\nConfiguration of images: {configuration}")
 
     # Read pairs
     pairs_number = int(tokens[idx])
@@ -108,6 +129,71 @@ def main():
         print(f"Slave path: {stereo_pair.raw_slave_path}")  
         print(f"Conversion factor of the pair {stereo_pair.id_master} | {stereo_pair.id_slave} : {stereo_pair.mean_conversion_factor}")
         print(f"Rotation angle of the pair {stereo_pair.id_master} | {stereo_pair.id_slave} : {stereo_pair.mean_rotation_angle}\n")
+
+    kwl = {
+        "meters": configuration.meters,
+        "cut_min_lat": configuration.min_lat,
+        "cut_max_lat": configuration.max_lat,  
+        "cut_min_lon": configuration.min_lon,      
+        "cut_max_lon": configuration.max_lon,        
+        "operation": "ortho",
+        "resampler_filter": "box",
+        "projection": "utm"
+    }
+
+    # Pyramidal iteration
+    for s in range(configuration.number_steps-1, -1, -1):
+        # temp_dsm_path = os.path.join(args.output_dir, "temp_dsm")
+        # elev = pyossim.ossim_elev_manager.instance()
+
+        # if s != configuration.number_steps - 1:
+        #     elev.load_elevation_path(str(temp_dsm_path), True)
+
+        print(f"STEP: {s}")
+        # print(f"Temporary DSM path: {temp_dsm_path}")
+        # print(f"Number of elevation databases: {elev.getNumberOfElevationDatabases()}")
+
+        # gpt = pyossim.ossim_gpt(46.07334640, 11.12284482, 0.00)
+        # orthometric_height = elev.get_height_above_msl(gpt)
+        # ellipsoidal_height = elev.get_height_above_ellipsoid(gpt)
+        # print(f"Orthometric height (SRTM only): {orthometric_height} meters")
+        # print(f"Ellipsoidal height (SRTM + EGM96): {ellipsoidal_height} meters")
+        # print(f"Geoid offset: {ellipsoidal_height - orthometric_height} meters")   
+
+        ortho_res = configuration.meters * (2 ** s)
+        kwl["meters"] = ortho_res
+
+        print(f"{ortho_res} m: resolution of this level")
+        print(f"{configuration.meters} m: final DSM resolution\n")        
+
+        ortho_images_dict = {}
+        ortho_images_mask_list = [] # What is this?
+
+        for n in range(int(images_number)):
+            kwl["image1.file"] = images_list[n].raw_image_path
+
+            raw_image_id = images_list[n].raw_image_id
+            ortho_file_name = f"ortho_image_level_{s}_image_{raw_image_id}_ortho.TIF"
+            ortho_file_path = os.path.join(args.output_dir, "ortho_images", ortho_file_name)
+            ortho_images_dict[raw_image_id] = ortho_file_path
+            kwl["output_file"] = ortho_file_path
+
+            print(f"Keyword list for orthorectification: {kwl}")
+
+            ortho(kwl)
+        
+        print(f"Dictionary of orthorectified images: {ortho_images_dict}\n")
+            
+        for n in range(int(pairs_number)):
+            pair = stereo_pairs_list[n]
+            pair.ortho_master_path = ortho_images_dict[str(pair.id_master)]
+            pair.ortho_slave_path = ortho_images_dict[str(pair.id_slave)]
+            
+        print(f"List of stereo pairs: {stereo_pairs_list}\n")
+
+        merged_disp = DisparityMerging()
+        merged_disp.execute(stereo_pairs_list, ortho_images_mask_list, images_list, ortho_res)
+        # final_disp = merged_disp.get_merged_disp()      
 
 
 if __name__ == "__main__":

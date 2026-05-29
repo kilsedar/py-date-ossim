@@ -1,1 +1,5 @@
-python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm.tif --number-steps 2 --meters 2 --cut-bbox-ll 46.03160678 46.09522479 11.06858452 11.15119117
+Large area:
+python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm --number-steps 2 --meters 1 --cut-extent-ll 46.03160678 46.09522479 11.06858452 11.15119117
+
+Very small area:
+python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm --number-steps 3 --meters 1 --cut-extent-ll 46.053 46.056 11.123 11.128
