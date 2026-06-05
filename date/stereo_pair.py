@@ -38,9 +38,9 @@ class StereoPair:
         print("EPIPOLAR DIRECTION COMPUTATION")
 
         grid = 10
-        minimum_height= 500.0
-        maximum_height= 1000.0
-        self.delta_height = maximum_height - minimum_height
+        min_height= 500.0
+        max_height= 1000.0
+        self.delta_height = max_height - min_height
 
         registry = pyossim.ossim_image_handler_registry.instance()
         raw_master_handler = registry.open(self.raw_master_path)
@@ -72,15 +72,15 @@ class StereoPair:
             for j in range(1, grid + 1): # Rows (y-axis in image)
                 image_point_master = pyossim.ossim_dpt(delta_I*i, delta_J*j)
                 # print(f"Image point master: {image_point_master}")
-                ground_point_master_up = raw_master_geom.local_to_world(image_point_master, maximum_height)
-                ground_point_master_down = raw_master_geom.local_to_world(image_point_master, minimum_height)
+                ground_point_master_up = raw_master_geom.local_to_world(image_point_master, max_height)
+                ground_point_master_down = raw_master_geom.local_to_world(image_point_master, min_height)
                 # print(f"Ground point master: {ground_point_master_up}")
                 # print(f"Ground point down: {ground_point_master_down}")
 
                 # Once I've computed the lowest point on the ground, I go to the slave's image plane
                 image_point_slave_down = raw_slave_geom.world_to_local(ground_point_master_down)
                 # From the slave's image plane, I go to the highest point on the ground
-                ground_point_slave_up = raw_slave_geom.local_to_world(image_point_slave_down, maximum_height)
+                ground_point_slave_up = raw_slave_geom.local_to_world(image_point_slave_down, max_height)
 
                 # Geographic --> UTM conversion
                 utm_ground_point_master_up = pyossim.ossim_utmpt(ground_point_master_up)

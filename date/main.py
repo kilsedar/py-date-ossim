@@ -167,7 +167,6 @@ def main():
         print(f"{configuration.meters} m: final DSM resolution\n")        
 
         ortho_images_dict = {}
-        ortho_images_mask_list = [] # What is this?
 
         for n in range(int(images_number)):
             kwl["image1.file"] = images_list[n].raw_image_path
@@ -192,7 +191,7 @@ def main():
         print(f"List of stereo pairs: {stereo_pairs_list}\n")
 
         merged_disp = DisparityMerging()
-        merged_disp.execute(stereo_pairs_list, ortho_images_mask_list, images_list, ortho_res)
+        merged_disp.execute(stereo_pairs_list, s, ortho_res)
         # final_disp = merged_disp.get_merged_disp()      
 
 
