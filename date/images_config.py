@@ -68,7 +68,7 @@ class ImagesConfig:
             width = image_pixel_dimensions.width()
             height = image_pixel_dimensions.height()
 
-            # Define the 4 corners of the polygon corresponding to the image in pixel space (ossimDpt)
+            # Define the 4 corners of the polygon corresponding to the image in pixel space (ossim_dpt)
             # ul=(0,0), ur=(w,0), lr=(w,h), ll=(0,h)
             corners_pixels = [
                 pyossim.ossim_dpt(0, 0),
@@ -77,7 +77,7 @@ class ImagesConfig:
                 pyossim.ossim_dpt(0, height)
             ]
 
-            # Convert each pixel to a world point (ossimGpt)
+            # Convert each pixel to a world point (ossim_gpt)
             world_corners = []
             for corner_pixel in corners_pixels:
                 corner_world = geom.localToWorld(corner_pixel)

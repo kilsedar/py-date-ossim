@@ -11,15 +11,15 @@ class DisparityMerging:
         self.mask_descending_tot = None    # NumPy array
         self.merged_disp = None            # NumPy array
         
-        self.master_array = None           # NumPy array
-        self.slave_array = None            # NumPy array
-        self.master_array_uint8 = None     # NumPy array (uint8)
-        self.slave_array_uint8 = None      # NumPy array (uint8)
+        self.reference_array = None           # NumPy array
+        self.target_array = None            # NumPy array
+        self.reference_array_uint8 = None     # NumPy array (uint8)
+        self.target_array_uint8 = None      # NumPy array (uint8)
         
         # OSSIM objects
         self.final_dsm = None              # pyossim.ossim_image_data
-        self.master_handler = None         # pyossim.ossim_image_handler
-        self.slave_handler = None          # pyossim.ossim_image_handler
+        self.reference_handler = None         # pyossim.ossim_image_handler
+        self.target_handler = None          # pyossim.ossim_image_handler
         
         # Primitive types
         self.null_disp_threshold = 0.0     # float
@@ -33,18 +33,18 @@ class DisparityMerging:
 
         for n in range(pairs_number):
             pair = stereo_pairs_list[n]
-            print(f"PAIR PROCESSED => Master: {pair.id_master} | Slave: {pair.id_slave}\n")
+            print(f"PAIR PROCESSED => Reference: {pair.id_reference} | Target: {pair.id_target}\n")
 
-            # ortho_master_path = pair.ortho_master_path
-            # ortho_slave_path = pair.ortho_slave_path
-            # self.master_handler = registry.open(ortho_master_path)
-            # self.slave_handler = registry.open(ortho_slave_path)
+            # ortho_reference_path = pair.ortho_reference_path
+            # ortho_target_path = pair.ortho_target_path
+            # self.reference_handler = registry.open(ortho_reference_path)
+            # self.target_handler = registry.open(ortho_target_path)
 
-            self._img_conversion_to_array(pair.ortho_master_path, pair.ortho_slave_path)
+            self._img_conversion_to_array(pair.ortho_reference_path, pair.ortho_target_path)
 
             # Get rotation matrix for rotating the image around its center
             # center: (x, y)
-            center = (self.master_array.shape[1] / 2.0, self.master_array.shape[0] / 2.0)
+            center = (self.reference_array.shape[1] / 2.0, self.reference_array.shape[0] / 2.0)
             angle = -pair.mean_rotation_angle
             rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
             # print(rotation_matrix)
@@ -52,7 +52,7 @@ class DisparityMerging:
             # Determine bounding box
             cos_angle = abs(rotation_matrix[0, 0])
             sin_angle = abs(rotation_matrix[0, 1])
-            h, w = self.master_array.shape[:2]
+            h, w = self.reference_array.shape[:2]
             bbox_w = int((h * sin_angle) + (w * cos_angle))
             bbox_h = int((h * cos_angle) + (w * sin_angle))
 
@@ -61,13 +61,13 @@ class DisparityMerging:
             rotation_matrix[1, 2] += (bbox_h / 2.0) - center[1]
 
             # Apply the affine warp (rotation and translation) to both arrays
-            self.master_array = cv2.warpAffine(self.master_array, rotation_matrix, (bbox_w, bbox_h))
-            self.slave_array = cv2.warpAffine(self.slave_array, rotation_matrix, (bbox_w, bbox_h))
+            self.reference_array = cv2.warpAffine(self.reference_array, rotation_matrix, (bbox_w, bbox_h))
+            self.target_array = cv2.warpAffine(self.target_array, rotation_matrix, (bbox_w, bbox_h))
 
-            cv2.imwrite("/opt/data/ossim/output/rotated_master.tiff", self.master_array)
-            cv2.imwrite("/opt/data/ossim/output/rotated_slave.tiff", self.slave_array)
+            cv2.imwrite("/opt/data/ossim/output/rotated_reference.tiff", self.reference_array)
+            cv2.imwrite("/opt/data/ossim/output/rotated_target.tiff", self.target_array)
 
-            self._img_conversion_to_uint8(pair.id_master, pair.id_slave, step)
+            self._img_conversion_to_uint8(pair.id_reference, pair.id_target, step)
 
 
     def get_merged_disp(self) -> np.ndarray:
@@ -82,20 +82,20 @@ class DisparityMerging:
     # =============================================
     # "Private" methods (prefixed with _ in Python)
     # =============================================
-    def _img_conversion_to_array(self, ortho_master_path: str, ortho_slave_path: str) -> bool:
+    def _img_conversion_to_array(self, ortho_reference_path: str, ortho_target_path: str) -> bool:
         """
         Open ortho images and convert them to OpenCV format (NumPy arrays)
         """
 
-        self.master_array = cv2.imread(ortho_master_path, cv2.IMREAD_ANYDEPTH)
-        self.slave_array = cv2.imread(ortho_slave_path, cv2.IMREAD_ANYDEPTH)
+        self.reference_array = cv2.imread(ortho_reference_path, cv2.IMREAD_ANYDEPTH)
+        self.target_array = cv2.imread(ortho_target_path, cv2.IMREAD_ANYDEPTH)
 
-        if self.master_array is None or self.slave_array is None:
+        if self.reference_array is None or self.target_array is None:
             print("ERROR: Images could not be read into NumPy arrays")
             return False
 
-        self.ortho_rows, self.ortho_columns = self.master_array.shape[:2]
-        # print(self.master_array)
+        self.ortho_rows, self.ortho_columns = self.reference_array.shape[:2]
+        # print(self.reference_array)
         # print(self.ortho_rows, self.ortho_columns)
 
         print(f"OSSIM->NumPy array conversion is done\n")
@@ -180,27 +180,27 @@ class DisparityMerging:
         # return min, max
 
 
-    def _img_conversion_to_uint8 (self, id_master: int, id_slave: int, step: int) -> bool:
+    def _img_conversion_to_uint8 (self, id_reference: int, id_target: int, step: int) -> bool:
         """
-        Convert the master and slave arrays to uint8 (8-bit unsigned integers)
+        Convert the reference and target arrays to uint8 (8-bit unsigned integers)
         """
 
         threshold = 5.0
 
         # Compute histograms 
-        min_val_master, max_val_master = self._img_compute_histogram(id_master, self.master_array, step, threshold)
-        min_val_slave, max_val_slave = self._img_compute_histogram(id_slave, self.slave_array, step, threshold)
+        min_val_reference, max_val_reference = self._img_compute_histogram(id_reference, self.reference_array, step, threshold)
+        min_val_target, max_val_target = self._img_compute_histogram(id_target, self.target_array, step, threshold)
 
-        print(f"Master: {min_val_master}, {max_val_master} | Slave: {min_val_slave}, {max_val_slave}\n")
+        print(f"Reference: {min_val_reference}, {max_val_reference} | Target: {min_val_target}, {max_val_target}\n")
         print(f"*************************************\n")
 
-        diff_master = max_val_master - min_val_master
-        scale_master = 255.0 / diff_master if diff_master > 0 else 1.0
-        diff_slave = max_val_slave - min_val_slave
-        scale_slave = 255.0 / diff_slave if diff_slave > 0 else 1.0 
+        diff_reference = max_val_reference - min_val_reference
+        scale_reference = 255.0 / diff_reference if diff_reference > 0 else 1.0
+        diff_target = max_val_target - min_val_target
+        scale_target = 255.0 / diff_target if diff_target > 0 else 1.0 
 
         # Perform the scaling, clip to [0, 255], and cast to uint8
-        self.master_array_8U = np.clip((self.master_array - min_val_master) * scale_master, 0, 255).astype(np.uint8)
-        self.slave_array_8U  = np.clip((self.slave_array - min_val_slave) * scale_slave, 0, 255).astype(np.uint8)
+        self.reference_array_8U = np.clip((self.reference_array - min_val_reference) * scale_reference, 0, 255).astype(np.uint8)
+        self.target_array_8U  = np.clip((self.target_array - min_val_target) * scale_target, 0, 255).astype(np.uint8)
 
         return True

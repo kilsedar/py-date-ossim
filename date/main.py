@@ -113,22 +113,22 @@ def main():
     print(f"\nNumber of pairs: {pairs_number}\n")
 
     for _ in range(pairs_number):
-        id_master = tokens[idx]
-        id_slave = tokens[idx + 1]
+        id_reference = tokens[idx]
+        id_target = tokens[idx + 1]
         idx += 2
 
         stereo_pair = StereoPair()
-        stereo_pair.set_ids(int(id_master), int(id_slave))
-        stereo_pair.set_raw_paths(images_list[int(id_master)].raw_image_path, images_list[int(id_slave)].raw_image_path)
+        stereo_pair.set_ids(int(id_reference), int(id_target))
+        stereo_pair.set_raw_paths(images_list[int(id_reference)].raw_image_path, images_list[int(id_target)].raw_image_path)
 
         stereo_pair.epipolar_direction()
         stereo_pairs_list.append(stereo_pair)
 
-        print(f"Pair: {id_master} | {id_slave}")
-        print(f"Master path: {stereo_pair.raw_master_path}")
-        print(f"Slave path: {stereo_pair.raw_slave_path}")  
-        print(f"Conversion factor of the pair {stereo_pair.id_master} | {stereo_pair.id_slave} : {stereo_pair.mean_conversion_factor}")
-        print(f"Rotation angle of the pair {stereo_pair.id_master} | {stereo_pair.id_slave} : {stereo_pair.mean_rotation_angle}\n")
+        print(f"Pair: {id_reference} | {id_target}")
+        print(f"Reference path: {stereo_pair.raw_reference_path}")
+        print(f"Target path: {stereo_pair.raw_target_path}")  
+        print(f"Conversion factor of the pair {stereo_pair.id_reference} | {stereo_pair.id_target} : {stereo_pair.mean_conversion_factor}")
+        print(f"Rotation angle of the pair {stereo_pair.id_reference} | {stereo_pair.id_target} : {stereo_pair.mean_rotation_angle}\n")
 
     kwl = {
         "meters": configuration.meters,
@@ -185,8 +185,8 @@ def main():
             
         for n in range(int(pairs_number)):
             pair = stereo_pairs_list[n]
-            pair.ortho_master_path = ortho_images_dict[str(pair.id_master)]
-            pair.ortho_slave_path = ortho_images_dict[str(pair.id_slave)]
+            pair.ortho_reference_path = ortho_images_dict[str(pair.id_reference)]
+            pair.ortho_target_path = ortho_images_dict[str(pair.id_target)]
             
         print(f"List of stereo pairs: {stereo_pairs_list}\n")
 
