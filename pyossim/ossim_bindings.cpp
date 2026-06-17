@@ -147,7 +147,12 @@ PYBIND11_MODULE(pyossim, m) {
 
     py::class_<ossimImageHandler, ossimRefPtr<ossimImageHandler>>(m, "ossim_image_handler")
         .def("get_image_geometry", &ossimImageHandler::getImageGeometry, "Return the image geometry object")
-        .def("get_bounding_rect", &ossimImageHandler::getBoundingRect, py::arg("res_level")=0, "Return the bounding rectangle in pixel space");
+
+        .def("get_bounding_rect", &ossimImageHandler::getBoundingRect, py::arg("res_level")=0, "Return the bounding rectangle in pixel space")
+        
+        .def("save_image_geometry", [](ossimImageHandler& self) {
+            return self.saveImageGeometry();
+        }, "Save the image geometry to a .geom file");
 
 
     py::class_<ossimImageHandlerRegistry>(m, "ossim_image_handler_registry")

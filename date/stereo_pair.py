@@ -1,37 +1,22 @@
 import math
 import pyossim
 
-from dataclasses import dataclass
-
-@dataclass
 class StereoPair:
-    id_reference: int = 0
-    id_target: int = 0
-    raw_reference_path: str = ""
-    raw_target_path: str = ""
-    ortho_reference_path: str = ""
-    ortho_target_path: str = ""
-    delta_height: float = 0.0
-    mean_rotation_angle: float = 0.0
-    mean_conversion_factor: float = 0.0
+    def __init__(self, id_reference: int, id_target: int, raw_reference_path: str, raw_target_path: str):
+        self.id_reference: int = id_reference
+        self.id_target: int = id_target
+        self.raw_reference_path: str = raw_reference_path
+        self.raw_target_path: str = raw_target_path
 
-
-    def set_ids(self, value_1: int, value_2: int):
-        self.id_reference = value_1
-        self.id_target = value_2
-
-
-    def set_raw_paths(self, value_1: str, value_2: str):
-        self.raw_reference_path = value_1
-        self.raw_target_path = value_2
-
-
-    def set_ortho_paths(self, value_1: str, value_2: str):
-        self.ortho_reference_path = value_1
-        self.ortho_target_path = value_2
+        self.ortho_reference_path: str | None = None
+        self.ortho_target_path: str | None = None
+        
+        self.delta_height: float | None = None
+        self.mean_rotation_angle: float | None = None
+        self.mean_conversion_factor: float | None = None
         
 
-    def epipolar_direction(self):
+    def epipolar_direction(self) -> None:
         """
         Calculate mean rotation angle (epipolar direction) and mean conversion factor
         """

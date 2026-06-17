@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from functools import reduce
 
 import pyproj
@@ -7,18 +6,19 @@ from shapely.geometry import Polygon
 
 import pyossim
 
-@dataclass
 class ImagesConfig:
-    number_steps: int = 2
-    meters: float = 1.0
-    min_lat: float = 0.0
-    max_lat: float = 0.0
-    min_lon: float = 0.0
-    max_lon: float = 0.0
+    def __init__(self, number_levels: int = 2, meters: float = 1.0):
+        self.number_levels: int = number_levels
+        self.meters: float = meters
+
+        self.min_lat: float | None = None
+        self.max_lat: float | None = None
+        self.min_lon: float | None = None
+        self.max_lon: float | None = None
 
 
     @staticmethod
-    def shrink_polygon_meters(polygon, meters):
+    def shrink_polygon_meters(polygon: Polygon, meters: float) -> Polygon | None:
         """
         polygon: Shapely polygon in latitude and longitude (EPSG:4326)
         meters: distance to shrink inward (positive number)
@@ -45,7 +45,7 @@ class ImagesConfig:
         return shrunk_polygon_degrees
 
 
-    def calculate_extent_from_images(self, image_file_paths):
+    def calculate_extent_from_images(self, image_file_paths: list[str]) -> bool:
         """
         Find the intersection of all images in latitude and longitude, shrink the intersection by the preferred amount of meters, and then calculate the bounding box of the resulting polygon
         """
@@ -59,12 +59,12 @@ class ImagesConfig:
                 print(f"Warning: {path} cannot be opened.")
                 continue
             
-            geom = handler.getImageGeometry()
+            geom = handler.get_image_geometry()
             if not geom:
                 print(f"Warning: No geometry for {path}")
                 continue
 
-            image_pixel_dimensions = handler.getBoundingRect()
+            image_pixel_dimensions = handler.get_bounding_rect()
             width = image_pixel_dimensions.width()
             height = image_pixel_dimensions.height()
 
@@ -80,7 +80,7 @@ class ImagesConfig:
             # Convert each pixel to a world point (ossim_gpt)
             world_corners = []
             for corner_pixel in corners_pixels:
-                corner_world = geom.localToWorld(corner_pixel)
+                corner_world = geom.local_to_world(corner_pixel)
                 # Shapely needs (longitude, latitude)
                 world_corners.append((corner_world.lon, corner_world.lat))
 
@@ -94,19 +94,21 @@ class ImagesConfig:
             if not overlap.is_empty:
                 overlap_shrunk = self.shrink_polygon_meters(overlap, 200)
 
-                min_lon, min_lat, max_lon, max_lat = overlap_shrunk.bounds
-                
-                self.min_lat = min_lat
-                self.max_lat = max_lat
-                self.min_lon = min_lon
-                self.max_lon = max_lon
+                if overlap_shrunk is None: 
+                    self.min_lat = self.max_lat = self.min_lon = self.max_lon = None  
+                    return False
 
-                print(f"\nBounding box (AABB) of the shrunk overlap in WKT: POLYGON(({self.min_lon} {self.min_lat}, {self.max_lon} {self.min_lat}, {self.max_lon} {self.max_lat}, {self.min_lon} {self.max_lat}, {self.min_lon} {self.min_lat}))")
+                self.min_lon, self.min_lat, self.max_lon, self.max_lat = overlap_shrunk.bounds
 
-                print(f"Extent is calculated for 3 images.")
-                print(f"Min lat: {self.min_lat}\nMax lat: {self.max_lat}\nMin lon: {self.min_lon}\nMax lon: {self.max_lon}")                
+                print(f"\nExtent is calculated for 3 images.")
+                print(f"Min lat: {self.min_lat}\nMax lat: {self.max_lat}\nMin lon: {self.min_lon}\nMax lon: {self.max_lon}")  
+                print(f"Bounding box (AABB) of the shrunk overlap in WKT: POLYGON(({self.min_lon} {self.min_lat}, {self.max_lon} {self.min_lat}, {self.max_lon} {self.max_lat}, {self.min_lon} {self.max_lat}, {self.min_lon} {self.min_lat}))")      
+                return True        
             else:
-                print("No common overlap is found.")
                 self.min_lat = self.max_lat = self.min_lon = self.max_lon = None
+
+                print("No common overlap is found.")                
+                return False
         except Exception as e:
             print(f"Error calculating intersection: {e}")
+            return False

@@ -1,53 +1,47 @@
+import argparse
+import os
+
 import numpy as np
 import cv2
-import argparse
+import rasterio
+
 import pyossim
+from .tp_generator import TiePointsGenerator
+from .disparity_map_generator import DisparityMapGenerator
 
 class DisparityMerging:
     def __init__(self):
         # OpenCV matrices (cv::Mat) become NumPy arrays in Python
-        self.disp_maps = []                # list of NumPy arrays
-        self.mask_ascending_tot = None     # NumPy array
-        self.mask_descending_tot = None    # NumPy array
-        self.merged_disp = None            # NumPy array
+        self.disp_maps: list[np.ndarray] = []  
+        self.merged_disp: np.ndarray | None = None   
+        self.final_dsm: np.ndarray | None = None             
         
-        self.reference_array = None           # NumPy array
-        self.target_array = None            # NumPy array
-        self.reference_array_uint8 = None     # NumPy array (uint8)
-        self.target_array_uint8 = None      # NumPy array (uint8)
+        self.reference_array: np.ndarray | None = None        
+        self.target_array: np.ndarray | None = None           
+        self.reference_array_uint8: np.ndarray | None = None 
+        self.target_array_uint8: np.ndarray | None = None               
         
-        # OSSIM objects
-        self.final_dsm = None              # pyossim.ossim_image_data
-        self.reference_handler = None         # pyossim.ossim_image_handler
-        self.target_handler = None          # pyossim.ossim_image_handler
-        
-        # Primitive types
-        self.null_disp_threshold = 0.0     # float
-        self.ortho_rows = 0                # int
-        self.ortho_columns = 0             # int
+        self.null_disp_threshold: float | None = None  
+        self.ortho_rows: int | None = None              
+        self.ortho_cols: int | None = None     
 
 
-    def execute(self, stereo_pairs_list: list, step: int, ortho_res: float) -> bool:
-        # registry = pyossim.ossimImageHandlerRegistry.instance()
-        pairs_number = len(stereo_pairs_list)
+    def execute(self, stereo_pairs_list: list, level: int, ortho_res: float) -> bool:
+        self.disp_maps = [] # Clear the disparity maps list at the start of every single pyramid level so that the old levels don't pollute the new ones!
+        pairs_number = len(stereo_pairs_list)        
 
         for n in range(pairs_number):
             pair = stereo_pairs_list[n]
-            print(f"PAIR PROCESSED => Reference: {pair.id_reference} | Target: {pair.id_target}\n")
+            print(f"------------------------\n")
+            print(f"PAIR TO PROCESS => Reference: {pair.id_reference} | Target: {pair.id_target}\n")
 
-            # ortho_reference_path = pair.ortho_reference_path
-            # ortho_target_path = pair.ortho_target_path
-            # self.reference_handler = registry.open(ortho_reference_path)
-            # self.target_handler = registry.open(ortho_target_path)
-
-            self._img_conversion_to_array(pair.ortho_reference_path, pair.ortho_target_path)
+            self._image_conversion_to_array(pair.ortho_reference_path, pair.ortho_target_path)
 
             # Get rotation matrix for rotating the image around its center
             # center: (x, y)
             center = (self.reference_array.shape[1] / 2.0, self.reference_array.shape[0] / 2.0)
             angle = -pair.mean_rotation_angle
             rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-            # print(rotation_matrix)
 
             # Determine bounding box
             cos_angle = abs(rotation_matrix[0, 0])
@@ -60,29 +54,182 @@ class DisparityMerging:
             rotation_matrix[0, 2] += (bbox_w / 2.0) - center[0]
             rotation_matrix[1, 2] += (bbox_h / 2.0) - center[1]
 
-            # Apply the affine warp (rotation and translation) to both arrays
+            # Apply the affine warp to both arrays
             self.reference_array = cv2.warpAffine(self.reference_array, rotation_matrix, (bbox_w, bbox_h))
             self.target_array = cv2.warpAffine(self.target_array, rotation_matrix, (bbox_w, bbox_h))
 
-            cv2.imwrite("/opt/data/ossim/output/rotated_reference.tiff", self.reference_array)
-            cv2.imwrite("/opt/data/ossim/output/rotated_target.tiff", self.target_array)
+            os.makedirs("/opt/data/ossim/output/rotated_ortho_images/", exist_ok=True)
+            cv2.imwrite("/opt/data/ossim/output/rotated_ortho_images/rotated_reference.tif", self.reference_array)
+            cv2.imwrite("/opt/data/ossim/output/rotated_ortho_images/rotated_target.tif", self.target_array)
 
-            self._img_conversion_to_uint8(pair.id_reference, pair.id_target, step)
+            print(f"Rotated ortho images are saved!\n")
 
+            self._image_conversion_to_uint8(pair.id_reference, pair.id_target, level)
 
-    def get_merged_disp(self) -> np.ndarray:
-        return self.merged_disp
+            stereo_tp = TiePointsGenerator(self.reference_array_uint8, self.target_array_uint8)
+            alignment_success = stereo_tp.execute(pair.id_reference, pair.id_target, level)
+            if not alignment_success:
+                print(f"WARNING: Image alignment has failed for pair {pair.id_reference} & {pair.id_target} at level {level}. Skipping disparity generation...")
+                continue # Safely skip to the next loop iteration instead of crashing!
+
+            disp_map_generator = DisparityMapGenerator()
+            disp_map_generator.execute(self.reference_array_uint8, stereo_tp.target_array_warped, pair, self.ortho_rows, self.ortho_cols, ortho_res, level)
+            self.disp_maps.append(disp_map_generator.disp_array)
+            self.null_disp_threshold = float(disp_map_generator.min_disp) + 0.5
+
+        if self.disp_maps:
+            # Initialize self.merged_disp as a copy of the first disparity map (Martina's solution)
+            # self.merged_disp = np.copy(self.disp_maps[0])
+
+            min_rows = min(disp_map.shape[0] for disp_map in self.disp_maps)
+            min_cols = min(disp_map.shape[1] for disp_map in self.disp_maps)
+
+            # Convert the -9999.0 NoData values to NaNs to do math easily
+            valid_arrays = []
+            for disp_map in self.disp_maps:
+                # Crop to the common size to guarantee homogeneous shapes 
+                disp_map_cropped = disp_map[:min_rows, :min_cols]
+                disp_map_nan = np.where(disp_map_cropped == -9999.0, np.nan, disp_map_cropped)
+                valid_arrays.append(disp_map_nan)
+
+            # Compute the average across all disparity maps, safely ignoring NaNs 
+            # This combines the data from all 3 images
+            # Replaced with the following block!
+            # disp_fused = np.nanmean(valid_arrays, axis=0) 
+
+            # Extract the first two maps for error calculation
+            disp_0_clean = valid_arrays[0]
+            disp_1_clean = valid_arrays[1]
+            error_disp = np.abs(disp_0_clean - disp_1_clean)
+
+            all_maps_average = np.nanmean(valid_arrays, axis=0)
+
+            # Vectorized conditional fusion 
+            # If the difference is < 5 meters, we use the average of all maps
+            # Otherwise, we default strictly to the second map (disp_1_clean)
+            disp_fused = np.where(error_disp < 5.0, all_maps_average, disp_1_clean)
+
+            # Convert NaNs back to the standard -9999.0 NoData value
+            self.merged_disp = np.where(np.isnan(disp_fused), -9999.0, disp_fused)
+
+            # Save the final fused disparity map 
+            # Cast from float64 to float32 for standard GIS TIFF compatibility
+            merged_disp_float32 = self.merged_disp.astype(np.float32)
+
+            merged_disp_name = f"5_merged_disparity_level_{level}.tif"
+            merged_disp_path = os.path.join("/opt/data/ossim/output/disparity_maps/", merged_disp_name)
+            cv2.imwrite(merged_disp_path, merged_disp_float32)
+            
+            print(f"Saved fused disparity map for level {level}: {merged_disp_name}\n")
+
+            return True
+        else:
+            print(f"ERROR: No disparity maps were successfully generated at level {level}. The entire level has failed.")
+            return False
     
 
-    def compute_dsm(self, args: argparse.Namespace, elev: pyossim.ossim_elev_manager, step: int) -> bool:
-        print(f"Computing DSM for step {step}...")
-        return True
-    
+    def compute_dsm(self, args: argparse.Namespace, elev: pyossim.ossim_elev_manager, stereo_pairs_list: list, level: int) -> None:
+        """
+        Combine the metric disparity map with the coarse elevation model to generate the updated DSM
+        """
+        print(f"Computing DSM for level {level}...")
+
+        # Delete the old temporary DSM from the previous pyramid level
+        temp_dsm_dir = os.path.join(args.output_dir, "temp_dsm")
+        temp_dsm_path = os.path.join(temp_dsm_dir, f"{args.output_filename}.tif")        
+        if os.path.exists(temp_dsm_path):
+            os.remove(temp_dsm_path)
+            print(f"Old temporary DSM is removed: {temp_dsm_path}")
+
+        # Extract the reference image geometry
+        registry = pyossim.ossim_image_handler_registry.instance()
+        self.reference_handler = registry.open(stereo_pairs_list[-1].ortho_reference_path)
+        reference_geom = self.reference_handler.get_image_geometry()
+
+        # Create an 8-bit visualization of the merged disparity map before adding coarse elevation
+        min_val, max_val, _, _ = cv2.minMaxLoc(self.merged_disp)
+        diff = max_val - min_val
+        scale = 255.0 / diff if diff > 0 else 1.0        
+
+        merged_disp_computed_0 = np.clip((self.merged_disp - min_val) * scale, 0, 255).astype(np.uint8)
+        
+        debug_name_0 = f"1_merged_disp_before_elevation_level_{level}.tif"
+        debug_path_0 = os.path.join(args.output_dir, "disparity_maps", debug_name_0)
+        cv2.imwrite(debug_path_0, merged_disp_computed_0)
+        print(f"Saved pre-elevation debug image: {debug_name_0}")
+
+        # We loop through every single pixel to add the base terrain elevation 
+        h, w = self.merged_disp.shape[:2]
+
+        for i in range(h): # Rows (y-axis)
+            for j in range(w): # Columns (x-axis)
+                # Image coordinate (x, y) = (j, i) 
+                image_pt = pyossim.ossim_dpt(float(j), float(i))
+
+                world_pt = reference_geom.local_to_world(image_pt)
+
+                height_above_msl = elev.get_height_above_msl(world_pt)
+
+                # Check if the pixel has a valid disparity value (not masked out)
+                if self.merged_disp[i, j] >= -9000.0:
+                    # Add the base MSL elevation to the pixel shift! 
+                    self.merged_disp[i, j] += height_above_msl
+                
+                # Fill holes with the coarse DSM (only for intermediate levels, not the last one)
+                elif level != 0:
+                    self.merged_disp[i, j] = height_above_msl
+
+        # Create an 8-bit visualization of the merged disparity map after adding coarse elevation
+        min_val, max_val, _, _ = cv2.minMaxLoc(self.merged_disp)
+        diff = max_val - min_val
+        scale = 255.0 / diff if diff > 0 else 1.0        
+
+        merged_disp_computed_1 = np.clip((self.merged_disp - min_val) * scale, 0, 255).astype(np.uint8)
+        
+        debug_name_1 = f"2_merged_disp_after_elevation_level_{level}.tif"
+        debug_path_1 = os.path.join(args.output_dir, "disparity_maps", debug_name_1)
+        cv2.imwrite(debug_path_1, merged_disp_computed_1)
+        print(f"Saved post-elevation debug image: {debug_name_1}")
+
+        # Cast the metric array to 32-bit float 
+        self.final_dsm = self.merged_disp.astype(np.float32)
+
+        # Determine output path based on whether this is the final level or a temporary level 
+        if level == 0:
+            # Final DSM folder 
+            dsm_dir = os.path.join(args.output_dir, "dsm")
+            os.makedirs(dsm_dir, exist_ok=True)
+            dsm_path = os.path.join(dsm_dir, f"{args.output_filename}.tif")
+        else:
+            # Temporary DSM folder 
+            dsm_dir = os.path.join(args.output_dir, "temp_dsm")
+            dsm_path = os.path.join(dsm_dir, f"{args.output_filename}.tif")
+
+        # Because we cropped self.final_dsm to match the reference image's size, they share the exact same spatial grid and projection!
+        reference_image_path = stereo_pairs_list[0].ortho_reference_path
+        
+        with rasterio.open(reference_image_path) as reference_src:
+            # Copy the reference image's metadata profile (CRS, bounds, etc.)
+            profile = reference_src.profile
+
+            profile.update(
+                dtype=rasterio.float32,
+                count=1,
+                compress='lzw',
+                nodata=-9999.0  # Tell QGIS to treat -9999.0 as transparent NoData!
+            )
+            
+        with rasterio.open(dsm_path, 'w', **profile) as dst:
+            dst.write(self.final_dsm, 1)
+
+        print(f"DSM is georeferenced and saved successfully: {dsm_path}\n")
+   
 
     # =============================================
     # "Private" methods (prefixed with _ in Python)
     # =============================================
-    def _img_conversion_to_array(self, ortho_reference_path: str, ortho_target_path: str) -> bool:
+    
+    def _image_conversion_to_array(self, ortho_reference_path: str, ortho_target_path: str) -> bool:
         """
         Open ortho images and convert them to OpenCV format (NumPy arrays)
         """
@@ -94,16 +241,16 @@ class DisparityMerging:
             print("ERROR: Images could not be read into NumPy arrays")
             return False
 
-        self.ortho_rows, self.ortho_columns = self.reference_array.shape[:2]
+        self.ortho_rows, self.ortho_cols = self.reference_array.shape[:2]
         # print(self.reference_array)
-        # print(self.ortho_rows, self.ortho_columns)
+        # print(self.ortho_rows, self.ortho_cols)
 
-        print(f"OSSIM->NumPy array conversion is done\n")
+        print(f"OSSIM->NumPy array conversion is done.\n")
 
         return True
     
 
-    def _img_compute_histogram(self, image_id: int, image: np.ndarray, step: int, threshold: float) -> tuple:
+    def _image_compute_histogram(self, image_id: int, image: np.ndarray, level: int, threshold: float) -> tuple:
         """
         Compute the histogram, trim off the top and bottom outlier tails by the percentage of the given threshold, return the new min and max
         """        
@@ -118,7 +265,7 @@ class DisparityMerging:
         if hist_size <= 0:
             return min_val, max_val
         
-        # Compute the histogram, which holds the number of each value, ordered from lowest to heightest
+        # Compute the histogram, which holds the number of each value, ordered from lowest to highest
         hist = cv2.calcHist([image], [0], None, [hist_size], [min_val, max_val])
         print(f"Histogram size: {hist_size}")
 
@@ -169,8 +316,9 @@ class DisparityMerging:
                 pt2 = (int(bin_w * i), int(hist_h - round(float(hist_normalized[i][0]))))
                 cv2.line(hist_image, pt1, pt2, (240, 40, 30), 1, 8, 0)
                     
-            histogram_image_name = f"histogram_level_{step}_image_{image_id}.png"
-            cv2.imwrite("/opt/data/ossim/output/"+histogram_image_name, hist_image)
+            os.makedirs("/opt/data/ossim/output/histograms/", exist_ok=True)        
+            histogram_image_name = f"histogram_level_{level}_image_{image_id}.png"
+            cv2.imwrite("/opt/data/ossim/output/histograms/"+histogram_image_name, hist_image)
 
         return new_min_val, new_max_val
 
@@ -180,7 +328,7 @@ class DisparityMerging:
         # return min, max
 
 
-    def _img_conversion_to_uint8 (self, id_reference: int, id_target: int, step: int) -> bool:
+    def _image_conversion_to_uint8 (self, id_reference: int, id_target: int, level: int) -> None:
         """
         Convert the reference and target arrays to uint8 (8-bit unsigned integers)
         """
@@ -188,11 +336,10 @@ class DisparityMerging:
         threshold = 5.0
 
         # Compute histograms 
-        min_val_reference, max_val_reference = self._img_compute_histogram(id_reference, self.reference_array, step, threshold)
-        min_val_target, max_val_target = self._img_compute_histogram(id_target, self.target_array, step, threshold)
+        min_val_reference, max_val_reference = self._image_compute_histogram(id_reference, self.reference_array, level, threshold)
+        min_val_target, max_val_target = self._image_compute_histogram(id_target, self.target_array, level, threshold)
 
         print(f"Reference: {min_val_reference}, {max_val_reference} | Target: {min_val_target}, {max_val_target}\n")
-        print(f"*************************************\n")
 
         diff_reference = max_val_reference - min_val_reference
         scale_reference = 255.0 / diff_reference if diff_reference > 0 else 1.0
@@ -200,7 +347,5 @@ class DisparityMerging:
         scale_target = 255.0 / diff_target if diff_target > 0 else 1.0 
 
         # Perform the scaling, clip to [0, 255], and cast to uint8
-        self.reference_array_8U = np.clip((self.reference_array - min_val_reference) * scale_reference, 0, 255).astype(np.uint8)
-        self.target_array_8U  = np.clip((self.target_array - min_val_target) * scale_target, 0, 255).astype(np.uint8)
-
-        return True
+        self.reference_array_uint8 = np.clip((self.reference_array - min_val_reference) * scale_reference, 0, 255).astype(np.uint8)
+        self.target_array_uint8 = np.clip((self.target_array - min_val_target) * scale_target, 0, 255).astype(np.uint8)

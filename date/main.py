@@ -37,7 +37,7 @@ def main():
         print("ERROR: Few arguments... At least 5 arguments are expected!")
         print("Usage: main.py <configuration_file> <output_results_directory> <output_dsm_name>")
         print("Options:")
-        print("--number-steps <number_steps> ===> Specify the number of steps for pyramidal processing.")
+        print("--number-levels <number_levels> ===> Specify the number of levels for pyramidal processing.")
         print("--meters <meters> ===> Specify a size in meters for resampling.")
         print("--cut-extent-ll <min_lat> <max_lat> <min_lon> <max_lon> ===> Specify an extent with the minimum and maximum latitude and longitude in decimal degrees.")
         sys.exit(1)
@@ -50,8 +50,8 @@ def main():
     parser.add_argument("output_filename", type=str, help="Output filename")
 
     # Optional arguments (flags)
-    parser.add_argument("--number-steps", type=int, default=1, help="Number of steps for pyramidal processing")
-    parser.add_argument("--meters", type=float, default=5.0, help="Grid spacing in meters")
+    parser.add_argument("--number-levels", type=int, default=2, help="Number of levels for pyramidal processing")
+    parser.add_argument("--meters", type=float, default=1.0, help="Grid spacing in meters")
     parser.add_argument("--cut-extent-ll", nargs=4, type=float, metavar=("min_lat", "max_lat", "min_lon", "max_lon"), help="Extent coordinates") 
 
     args = parser.parse_args()
@@ -95,17 +95,12 @@ def main():
         print(f"Path: {file_path}")
         print(f"Orbit: {orbit}")
 
-    configuration = ImagesConfig(
-        meters = args.meters or 1.0,
-        number_steps = args.number_steps or 2
-    )
+    configuration = ImagesConfig(meters = args.meters, number_levels = args.number_levels)
 
     if args.cut_extent_ll:
         configuration.min_lat, configuration.max_lat, configuration.min_lon, configuration.max_lon = args.cut_extent_ll
     else:
         configuration.calculate_extent_from_images([image.raw_image_path for image in images_list])
-
-    print(f"\nConfiguration of images: {configuration}")
 
     # Read pairs
     pairs_number = int(tokens[idx])
@@ -117,9 +112,7 @@ def main():
         id_target = tokens[idx + 1]
         idx += 2
 
-        stereo_pair = StereoPair()
-        stereo_pair.set_ids(int(id_reference), int(id_target))
-        stereo_pair.set_raw_paths(images_list[int(id_reference)].raw_image_path, images_list[int(id_target)].raw_image_path)
+        stereo_pair = StereoPair(id_reference=int(id_reference), id_target=int(id_target), raw_reference_path=images_list[int(id_reference)].raw_image_path, raw_target_path=images_list[int(id_target)].raw_image_path)
 
         stereo_pair.epipolar_direction()
         stereo_pairs_list.append(stereo_pair)
@@ -127,8 +120,8 @@ def main():
         print(f"Pair: {id_reference} | {id_target}")
         print(f"Reference path: {stereo_pair.raw_reference_path}")
         print(f"Target path: {stereo_pair.raw_target_path}")  
-        print(f"Conversion factor of the pair {stereo_pair.id_reference} | {stereo_pair.id_target} : {stereo_pair.mean_conversion_factor}")
-        print(f"Rotation angle of the pair {stereo_pair.id_reference} | {stereo_pair.id_target} : {stereo_pair.mean_rotation_angle}\n")
+        print(f"Conversion factor of the pair {stereo_pair.id_reference} | {stereo_pair.id_target}: {stereo_pair.mean_conversion_factor}")
+        print(f"Rotation angle of the pair {stereo_pair.id_reference} | {stereo_pair.id_target}: {stereo_pair.mean_rotation_angle}\n")
 
     kwl = {
         "meters": configuration.meters,
@@ -142,14 +135,16 @@ def main():
     }
 
     # Pyramidal iteration
-    for s in range(configuration.number_steps-1, -1, -1):
-        # temp_dsm_path = os.path.join(args.output_dir, "temp_dsm")
-        # elev = pyossim.ossim_elev_manager.instance()
+    for l in range(configuration.number_levels-1, -1, -1):
+        os.makedirs("/opt/data/ossim/output/temp_dsm/", exist_ok=True)
+        temp_dsm_path = os.path.join(args.output_dir, "temp_dsm")
+        elev = pyossim.ossim_elev_manager.instance()
 
-        # if s != configuration.number_steps - 1:
-        #     elev.load_elevation_path(str(temp_dsm_path), True)
+        if l != configuration.number_levels - 1:
+            elev.load_elevation_path(str(temp_dsm_path), True)
 
-        print(f"STEP: {s}")
+        print(f"*************************************\n")
+        print(f"LEVEL: {l}")
         # print(f"Temporary DSM path: {temp_dsm_path}")
         # print(f"Number of elevation databases: {elev.getNumberOfElevationDatabases()}")
 
@@ -160,7 +155,7 @@ def main():
         # print(f"Ellipsoidal height (SRTM + EGM96): {ellipsoidal_height} meters")
         # print(f"Geoid offset: {ellipsoidal_height - orthometric_height} meters")   
 
-        ortho_res = configuration.meters * (2 ** s)
+        ortho_res = configuration.meters * (2 ** l)
         kwl["meters"] = ortho_res
 
         print(f"{ortho_res} m: resolution of this level")
@@ -172,7 +167,7 @@ def main():
             kwl["image1.file"] = images_list[n].raw_image_path
 
             raw_image_id = images_list[n].raw_image_id
-            ortho_file_name = f"ortho_image_level_{s}_image_{raw_image_id}_ortho.TIF"
+            ortho_file_name = f"ortho_image_level_{l}_image_{raw_image_id}_ortho.TIF"
             ortho_file_path = os.path.join(args.output_dir, "ortho_images", ortho_file_name)
             ortho_images_dict[raw_image_id] = ortho_file_path
             kwl["output_file"] = ortho_file_path
@@ -187,12 +182,13 @@ def main():
             pair = stereo_pairs_list[n]
             pair.ortho_reference_path = ortho_images_dict[str(pair.id_reference)]
             pair.ortho_target_path = ortho_images_dict[str(pair.id_target)]
-            
-        print(f"List of stereo pairs: {stereo_pairs_list}\n")
 
         merged_disp = DisparityMerging()
-        merged_disp.execute(stereo_pairs_list, s, ortho_res)
-        # final_disp = merged_disp.get_merged_disp()      
+        success = merged_disp.execute(stereo_pairs_list, l, ortho_res)
+        if success:
+            merged_disp.compute_dsm(args, elev, stereo_pairs_list, l) 
+
+    print("A digital surface model from your triplet is successfully generated!")   
 
 
 if __name__ == "__main__":
