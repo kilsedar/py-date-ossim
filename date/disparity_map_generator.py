@@ -7,7 +7,7 @@ import rasterio
 from .stereo_pair import StereoPair 
 
 class DisparityMapGenerator:
-    def __init__(self, num_disp: int = 128, min_disp: int = -32, sad_window_size: int = 5):
+    def __init__(self, num_disp: int = 256, min_disp: int = -32, sad_window_size: int = 5):
         self.num_disp: int = num_disp # This must be a multiple of 16, try also 64 (maximum disparity - minimum disparity)      
         self.min_disp: int = min_disp # This can be negative, with a conversion factor of 1, use -16*2 (search start)
         self.sad_window_size: int = sad_window_size # This must be an odd number, typically 3, 5, or 7 (matched block size) 
@@ -23,7 +23,7 @@ class DisparityMapGenerator:
         cn = 1  # Grayscale images strictly contain 1 channel
         block_size = self.sad_window_size if self.sad_window_size > 0 else 3        
         p1 = 8 * cn * block_size * block_size # P1 and P2 control the smoothness of the disparity map 
-        p2 = 40 * cn * block_size * block_size # P2 must be larger than P1
+        p2 = 32 * cn * block_size * block_size # P2 must be larger than P1
 
         sgbm = cv2.StereoSGBM_create(
             minDisparity=self.min_disp, 
@@ -32,10 +32,10 @@ class DisparityMapGenerator:
             P1=p1,
             P2=p2,
             preFilterCap=63,
-            uniquenessRatio=10,
+            uniquenessRatio=8,
             speckleWindowSize=200,
             speckleRange=2,
-            disp12MaxDiff=1, # maximum allowed difference (in integer pixel units) in the left-right disparity check
+            disp12MaxDiff=5, # maximum allowed difference (in integer pixel units) in the left-right disparity check
             mode=cv2.StereoSGBM_MODE_SGBM  # 5-direction SGBM 
             # mode=cv2.StereoSGBM_MODE_HH # 8-direction mode for cleaner urban building structures!
         )
