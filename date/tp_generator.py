@@ -23,7 +23,7 @@ class TiePointsGenerator:
         self.target_y: float | None = None
 
 
-    def execute(self, id_reference: int, id_target: int, level: int) -> bool:
+    def execute(self, index_pair: int, id_reference: int, id_target: int, level: int) -> bool:
         """
         Generate, draw, and warp coordinates
         """
@@ -34,7 +34,7 @@ class TiePointsGenerator:
         
         self._tp_draw(id_reference, id_target, level)
 
-        success = self._tp_warp(id_reference, id_target, level)
+        success = self._tp_warp(index_pair, id_target, level)
 
         return success
 
@@ -223,7 +223,7 @@ class TiePointsGenerator:
         )
 
         os.makedirs("/opt/data/ossim/output/tie_points/", exist_ok=True)
-        tp_image_name = f"tp_level_{level}_ref_{id_reference}_tar_{id_target}.png"
+        tp_image_name = f"tp_level_{level}_reference_{id_reference}_target_{id_target}.png"
         cv2.imwrite("/opt/data/ossim/output/tie_points/"+tp_image_name, image_matches)
         
         print(f"Tie points visualization is saved!\n")
@@ -337,7 +337,7 @@ class TiePointsGenerator:
         return transformation_matrix
  
 
-    def _tp_warp(self, id_reference: int, id_target: int, level: int) -> bool:
+    def _tp_warp(self, index_pair: int, id_target: int, level: int) -> bool:
         """
         Warp the target image using the estimated transformation matrix
         """
@@ -370,9 +370,7 @@ class TiePointsGenerator:
 
         # Save aligned images
         os.makedirs("/opt/data/ossim/output/warped/", exist_ok=True)
-        reference_name = f"reference_level_{level}_id_{id_reference}.tif"
-        target_name = f"target_aligned_level_{level}_id_{id_target}.tif"
-        cv2.imwrite("/opt/data/ossim/output/warped/"+reference_name, self.reference_array)
+        target_name = f"target_aligned_level_{level}_pair_{index_pair}_id_{id_target}.tif"
         cv2.imwrite("/opt/data/ossim/output/warped/"+target_name, self.target_array_warped)
 
         return True

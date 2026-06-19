@@ -167,7 +167,7 @@ def main():
             kwl["image1.file"] = images_list[n].raw_image_path
 
             raw_image_id = images_list[n].raw_image_id
-            ortho_file_name = f"ortho_image_level_{l}_image_{raw_image_id}_ortho.TIF"
+            ortho_file_name = f"ortho_image_level_{l}_id_{raw_image_id}.tif"
             ortho_file_path = os.path.join(args.output_dir, "ortho_images", ortho_file_name)
             ortho_images_dict[raw_image_id] = ortho_file_path
             kwl["output_file"] = ortho_file_path

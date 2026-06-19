@@ -59,15 +59,15 @@ class DisparityMerging:
             self.target_array = cv2.warpAffine(self.target_array, rotation_matrix, (bbox_w, bbox_h))
 
             os.makedirs("/opt/data/ossim/output/rotated_ortho_images/", exist_ok=True)
-            cv2.imwrite("/opt/data/ossim/output/rotated_ortho_images/rotated_reference.tif", self.reference_array)
-            cv2.imwrite("/opt/data/ossim/output/rotated_ortho_images/rotated_target.tif", self.target_array)
+            cv2.imwrite(f"/opt/data/ossim/output/rotated_ortho_images/rotated_ortho_image_level_{level}_pair_{n}_reference_{pair.id_reference}.tif", self.reference_array)
+            cv2.imwrite(f"/opt/data/ossim/output/rotated_ortho_images/rotated_ortho_image_level_{level}_pair_{n}_target_{pair.id_target}.tif", self.target_array)
 
             print(f"Rotated ortho images are saved!\n")
 
             self._image_conversion_to_uint8(pair.id_reference, pair.id_target, level)
 
             stereo_tp = TiePointsGenerator(self.reference_array_uint8, self.target_array_uint8)
-            alignment_success = stereo_tp.execute(pair.id_reference, pair.id_target, level)
+            alignment_success = stereo_tp.execute(n, pair.id_reference, pair.id_target, level)
             if not alignment_success:
                 print(f"WARNING: Image alignment has failed for pair {pair.id_reference} & {pair.id_target} at level {level}. Skipping disparity generation...")
                 continue # Safely skip to the next loop iteration instead of crashing!
@@ -153,7 +153,7 @@ class DisparityMerging:
 
         merged_disp_computed_0 = np.clip((self.merged_disp - min_val) * scale, 0, 255).astype(np.uint8)
         
-        debug_name_0 = f"1_merged_disp_before_elevation_level_{level}.tif"
+        debug_name_0 = f"6_merged_disparity_before_elevation_level_{level}.tif"
         debug_path_0 = os.path.join(args.output_dir, "disparity_maps", debug_name_0)
         cv2.imwrite(debug_path_0, merged_disp_computed_0)
         print(f"Saved pre-elevation debug image: {debug_name_0}")
@@ -186,7 +186,7 @@ class DisparityMerging:
 
         merged_disp_computed_1 = np.clip((self.merged_disp - min_val) * scale, 0, 255).astype(np.uint8)
         
-        debug_name_1 = f"2_merged_disp_after_elevation_level_{level}.tif"
+        debug_name_1 = f"7_merged_disparity_after_elevation_level_{level}.tif"
         debug_path_1 = os.path.join(args.output_dir, "disparity_maps", debug_name_1)
         cv2.imwrite(debug_path_1, merged_disp_computed_1)
         print(f"Saved post-elevation debug image: {debug_name_1}")
@@ -317,7 +317,7 @@ class DisparityMerging:
                 cv2.line(hist_image, pt1, pt2, (240, 40, 30), 1, 8, 0)
                     
             os.makedirs("/opt/data/ossim/output/histograms/", exist_ok=True)        
-            histogram_image_name = f"histogram_level_{level}_image_{image_id}.png"
+            histogram_image_name = f"histogram_level_{level}_image_id_{image_id}.png"
             cv2.imwrite("/opt/data/ossim/output/histograms/"+histogram_image_name, hist_image)
 
         return new_min_val, new_max_val

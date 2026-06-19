@@ -46,7 +46,7 @@ class DisparityMapGenerator:
 
         # Save the sub-pixel disparity map
         os.makedirs("/opt/data/ossim/output/disparity_maps/", exist_ok=True)
-        float_disp_name = f"1_float_disparity_level_{level}_ref_{stereo_pair.id_reference}_tar_{stereo_pair.id_target}.tif"
+        float_disp_name = f"1_float_disparity_level_{level}_reference_{stereo_pair.id_reference}_target_{stereo_pair.id_target}.tif"
         cv2.imwrite("/opt/data/ossim/output/disparity_maps/"+float_disp_name, self.disp_array)
 
         print(f"Float disparity maps are saved!\n")
@@ -62,7 +62,7 @@ class DisparityMapGenerator:
         disp_array_uint8 = np.clip((self.disp_array - min_val) * scale, 0, 255).astype(np.uint8)
         
         # Save the visualized disparity
-        sgbm_disp_name = f"2_sgbm_disparity_level_{level}_ref_{stereo_pair.id_reference}_tar_{stereo_pair.id_target}.tif"
+        sgbm_disp_name = f"2_uint8_disparity_level_{level}_reference_{stereo_pair.id_reference}_target_{stereo_pair.id_target}.tif"
         cv2.imwrite("/opt/data/ossim/output/disparity_maps/"+sgbm_disp_name, disp_array_uint8)
 
         print("Dense matching step is complete.")
@@ -98,7 +98,7 @@ class DisparityMapGenerator:
             x_top_left : x_top_left + cols
         ]
 
-        rotated_float_disp_name = f"3_rotated_float_disparity_level_{level}_ref_{stereo_pair.id_reference}_tar_{stereo_pair.id_target}.tif"
+        rotated_float_disp_name = f"3_rotated_float_disparity_level_{level}_reference_{stereo_pair.id_reference}_target_{stereo_pair.id_target}.tif"
         cv2.imwrite("/opt/data/ossim/output/disparity_maps/"+rotated_float_disp_name, self.disp_array)
 
         # Convert the array to float64 
@@ -121,7 +121,7 @@ class DisparityMapGenerator:
         # Cast the metric array to 32-bit float 
         self.final_disp = self.disp_array.astype(np.float32)
 
-        disp_name = f"4_disparity_level_{level}_ref_{stereo_pair.id_reference}_tar_{stereo_pair.id_target}.tif"
+        disp_name = f"4_final_disparity_level_{level}_reference_{stereo_pair.id_reference}_target_{stereo_pair.id_target}.tif"
         disp_path = f"/opt/data/ossim/output/disparity_maps/{disp_name}"
 
         # Get the path to the original reference ortho image
