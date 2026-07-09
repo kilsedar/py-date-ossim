@@ -7,37 +7,47 @@ import rasterio
 from .stereo_pair import StereoPair 
 
 class DisparityMapGenerator:
-    def __init__(self, num_disp: int = 256, min_disp: int = -32, sad_window_size: int = 5):
-        self.num_disp: int = num_disp # This must be a multiple of 16, try also 64 (maximum disparity - minimum disparity)      
-        self.min_disp: int = min_disp # This can be negative, with a conversion factor of 1, use -16*2 (search start)
-        self.sad_window_size: int = sad_window_size # This must be an odd number, typically 3, 5, or 7 (matched block size) 
-
+    def __init__(self):
         self.disp_array: np.ndarray | None = None
         self.final_disp: np.ndarray | None = None     
 
 
-    def execute(self, reference_array: np.ndarray, target_array: np.ndarray, stereo_pair: StereoPair, rows: int, cols: int, ortho_res: float, level: int) -> None:
+    def execute(self, reference_array: np.ndarray, target_array: np.ndarray, stereo_pair: StereoPair, rows: int, cols: int, ortho_res: float, level: int, reference_handler) -> None:
         print("DISPARITY MAP GENERATION")
+        # print(reference_array.dtype)
+        # print(target_array.dtype)
 
         # Configure the semi-global block matching (SGBM) parameters
         cn = 1  # Grayscale images strictly contain 1 channel
-        block_size = self.sad_window_size if self.sad_window_size > 0 else 3        
-        p1 = 8 * cn * block_size * block_size # P1 and P2 control the smoothness of the disparity map 
-        p2 = 32 * cn * block_size * block_size # P2 must be larger than P1
+        sad_window_size = 5 # This must be an odd number, typically 3, 5, or 7 (used in place of the block size in P1 and P2 calculation as well) 
+        p1 = 8 * cn * sad_window_size * sad_window_size # P1 and P2 control the smoothness of the disparity map 
+        p2 = 40 * cn * sad_window_size * sad_window_size # P2 must be larger than P1
+
+        if level == 0:     
+            sgbm_mode = cv2.StereoSGBM_MODE_SGBM # 5-direction SGBM 
+            min_disp = -16 
+            num_disp = 64 
+        elif level == 1:  
+            sgbm_mode = cv2.StereoSGBM_MODE_HH # Full 8-direction matching for cleaner urban building outlines!
+            min_disp = -16
+            num_disp = 32
+        else:            
+            sgbm_mode = cv2.StereoSGBM_MODE_HH
+            min_disp = -8
+            num_disp = 16
 
         sgbm = cv2.StereoSGBM_create(
-            minDisparity=self.min_disp, 
-            numDisparities=self.num_disp,
-            blockSize=block_size,
+            minDisparity=min_disp, # This can be negative, with a conversion factor of 1, use -16*2 (search start) 
+            numDisparities=num_disp, # This must be a multiple of 16, try also 64 (maximum disparity - minimum disparity)
+            blockSize=sad_window_size, 
             P1=p1,
             P2=p2,
             preFilterCap=63,
-            uniquenessRatio=8,
-            speckleWindowSize=200,
-            speckleRange=2,
-            disp12MaxDiff=5, # maximum allowed difference (in integer pixel units) in the left-right disparity check
-            mode=cv2.StereoSGBM_MODE_SGBM  # 5-direction SGBM 
-            # mode=cv2.StereoSGBM_MODE_HH # 8-direction mode for cleaner urban building structures!
+            uniquenessRatio=5,
+            speckleWindowSize=100,
+            speckleRange=1,
+            disp12MaxDiff=1, # Maximum allowed difference (in integer pixel units) in the left-right disparity check
+            mode=sgbm_mode
         )
 
         # Execute the dense matching
@@ -52,8 +62,10 @@ class DisparityMapGenerator:
         print(f"Float disparity maps are saved!\n")
 
         # Normalize the disparity to 8-bit (0-255) for visual debugging
-        min_val, max_val, _, _ = cv2.minMaxLoc(self.disp_array)
-        print(f"Disparity => Min: {min_val} | Max: {max_val}\n")
+        # min_val, max_val, _, _ = cv2.minMaxLoc(self.disp_array) # Martina's solution
+        valid_pixels = self.disp_array[self.disp_array > (min_disp - 0.5) * 16]
+        min_val = np.percentile(valid_pixels, 5)
+        max_val = np.percentile(valid_pixels, 95) 
 
         diff = max_val - min_val
         scale = 255.0 / diff if diff > 0 else 1.0
@@ -109,37 +121,49 @@ class DisparityMapGenerator:
 
         # Vectorized outlier masking 
         # Any disparity value below this threshold is an occlusion/invalid pixel
-        # original: mask_threshold = (self.min_disp + 0.5 - 1.0) / stereo_pair.mean_conversion_factor
-        mask_threshold = (self.min_disp - 0.5) / stereo_pair.mean_conversion_factor 
+        # original: mask_threshold = (min_disp + 0.5 - 1.0) / stereo_pair.mean_conversion_factor
+        mask_threshold = ortho_res * (min_disp - 0.5) / stereo_pair.mean_conversion_factor 
         self.disp_array[self.disp_array < mask_threshold] = -9999.0
-
-        self.disp_array[:10, :] = -9999.0   # Top edge
-        self.disp_array[-10:, :] = -9999.0  # Bottom edge
-        self.disp_array[:, :10] = -9999.0   # Left edge
-        self.disp_array[:, -10:] = -9999.0  # Right edge
 
         # Cast the metric array to 32-bit float 
         self.final_disp = self.disp_array.astype(np.float32)
+
+        valid_mask = (self.final_disp >= -9000).astype(np.uint8)
+        min_val, max_val, _, _ = cv2.minMaxLoc(self.final_disp, mask=valid_mask)
+        print(f"Disparity => Min: {min_val} | Max: {max_val}\n")
 
         disp_name = f"4_final_disparity_level_{level}_reference_{stereo_pair.id_reference}_target_{stereo_pair.id_target}.tif"
         disp_path = f"/opt/data/ossim/output/disparity_maps/{disp_name}"
 
         # Get the path to the original reference ortho image
         reference_image_path = stereo_pair.ortho_reference_path        
-        
-        # Read the georeferencing directly from the original reference image
-        with rasterio.open(reference_image_path) as reference_src:
-            # Copy the reference image's metadata profile (CRS, bounds, etc.)
-            profile = reference_src.profile
-        
-            profile.update(
-                dtype=rasterio.float32,
-                count=1,
-                compress='lzw',
-                nodata=-9999.0  # Tell QGIS to treat -9999.0 as transparent NoData!
-            )
-            
-        with rasterio.open(disp_path, 'w', **profile) as dst:
+
+        with rasterio.open(reference_image_path) as ref:
+            src_crs = ref.crs
+            src_transform = ref.transform
+            width = ref.width
+            height = ref.height
+
+        profile = {
+            "driver": "GTiff",
+            "height": height,
+            "width": width,
+            "count": 1,
+            "dtype": "float32",
+            "crs": src_crs,
+            "transform": src_transform,
+            "nodata": -9999.0,
+            "compress": "lzw",
+            "tiled": True,
+            "blockxsize": 256,
+            "blockysize": 256,
+        }
+
+        with rasterio.open(disp_path, "w", **profile) as dst:
             dst.write(self.final_disp, 1)
+
+        geom_path = os.path.splitext(disp_path)[0] + ".geom"
+        reference_geom = reference_handler.get_image_geometry()
+        reference_geom.save_to_file(geom_path)
 
         print(f"Metric disparity map is saved and georeferenced: {disp_name}\n")

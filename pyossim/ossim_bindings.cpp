@@ -142,7 +142,13 @@ PYBIND11_MODULE(pyossim, m) {
             ossimGpt worldPt;
             self.localToWorld(localPt, worldPt);
             return worldPt;
-        }, py::arg("local_point"), "Convert local (x, y) to world (latitude, longitude, height) coordinates using default elevation");
+        }, py::arg("local_point"), "Convert local (x, y) to world (latitude, longitude, height) coordinates using default elevation")
+        
+        .def("save_to_file", [](ossimImageGeometry& self, const std::string& path) {
+            ossimKeywordlist kwl;
+            self.saveState(kwl);
+            return kwl.write(ossimFilename(path));
+        }, py::arg("path"), "Save this geometry's state (projection, tie point, etc.) to a .geom keyword list file");
     
 
     py::class_<ossimImageHandler, ossimRefPtr<ossimImageHandler>>(m, "ossim_image_handler")
@@ -196,6 +202,10 @@ PYBIND11_MODULE(pyossim, m) {
         .def("load_elevation_path", [](ossimElevManager& self, const std::string& path, bool obtain_lock=true) {
             return self.loadElevationPath(ossimFilename(path), obtain_lock);
         }, py::arg("path"), py::arg("obtain_lock")=true, "Load a temporary DSM path into the elevation manager")
+
+        .def("clear", [](ossimElevManager& self) {
+            self.clear();
+        }, "Remove all loaded elevation paths and databases from the elevation manager")
 
         .def("get_number_of_elevation_databases", &ossimElevManager::getNumberOfElevationDatabases, "Get the number of loaded elevation databases")
 

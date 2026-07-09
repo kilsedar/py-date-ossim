@@ -21,7 +21,8 @@ class DisparityMerging:
         self.reference_array_uint8: np.ndarray | None = None 
         self.target_array_uint8: np.ndarray | None = None               
         
-        self.null_disp_threshold: float | None = None  
+        self.reference_handler: pyossim.ossim_image_handler | None = None
+
         self.ortho_rows: int | None = None              
         self.ortho_cols: int | None = None     
 
@@ -34,6 +35,18 @@ class DisparityMerging:
             pair = stereo_pairs_list[n]
             print(f"------------------------\n")
             print(f"PAIR TO PROCESS => Reference: {pair.id_reference} | Target: {pair.id_target}\n")
+
+            reference_image_path = stereo_pairs_list[n].ortho_reference_path
+
+            # UTM settings
+            input_geom_path = os.path.splitext(reference_image_path)[0] + ".geom"            
+            self._generate_rasterio_to_ossim_geom(reference_image_path, input_geom_path)
+
+            registry = pyossim.ossim_image_handler_registry.instance()
+            self.reference_handler = registry.open(reference_image_path)
+            # These two lines can be moved to compute_dsm if geo-scaled is used            
+            self.reference_handler.get_image_geometry()
+            self.reference_handler.save_image_geometry()
 
             self._image_conversion_to_array(pair.ortho_reference_path, pair.ortho_target_path)
 
@@ -73,9 +86,8 @@ class DisparityMerging:
                 continue # Safely skip to the next loop iteration instead of crashing!
 
             disp_map_generator = DisparityMapGenerator()
-            disp_map_generator.execute(self.reference_array_uint8, stereo_tp.target_array_warped, pair, self.ortho_rows, self.ortho_cols, ortho_res, level)
+            disp_map_generator.execute(self.reference_array_uint8, stereo_tp.target_array_warped, pair, self.ortho_rows, self.ortho_cols, ortho_res, level, self.reference_handler)
             self.disp_maps.append(disp_map_generator.disp_array)
-            self.null_disp_threshold = float(disp_map_generator.min_disp) + 0.5
 
         if self.disp_maps:
             # Initialize self.merged_disp as a copy of the first disparity map (Martina's solution)
@@ -139,11 +151,16 @@ class DisparityMerging:
         temp_dsm_path = os.path.join(temp_dsm_dir, f"{args.output_filename}.tif")        
         if os.path.exists(temp_dsm_path):
             os.remove(temp_dsm_path)
-            print(f"Old temporary DSM is removed: {temp_dsm_path}")
+            print(f"Old temporary DSM is removed: {temp_dsm_path}")        
 
-        # Extract the reference image geometry
-        registry = pyossim.ossim_image_handler_registry.instance()
-        self.reference_handler = registry.open(stereo_pairs_list[-1].ortho_reference_path)
+        # Determine output path based on whether this is the final level or a temporary level 
+        if level == 0:
+            dsm_dir = os.path.join(args.output_dir, "dsm")            
+        else:
+            dsm_dir = temp_dsm_dir
+
+        dsm_path = os.path.join(dsm_dir, f"{args.output_filename}.tif")
+
         reference_geom = self.reference_handler.get_image_geometry()
 
         # Create an 8-bit visualization of the merged disparity map before adding coarse elevation
@@ -165,10 +182,13 @@ class DisparityMerging:
             for j in range(w): # Columns (x-axis)
                 # Image coordinate (x, y) = (j, i) 
                 image_pt = pyossim.ossim_dpt(float(j), float(i))
+                # print(image_pt)
 
                 world_pt = reference_geom.local_to_world(image_pt)
+                # print(world_pt)
 
                 height_above_msl = elev.get_height_above_msl(world_pt)
+                # print(height_above_msl)
 
                 # Check if the pixel has a valid disparity value (not masked out)
                 if self.merged_disp[i, j] >= -9000.0:
@@ -194,41 +214,72 @@ class DisparityMerging:
         # Cast the metric array to 32-bit float 
         self.final_dsm = self.merged_disp.astype(np.float32)
 
-        # Determine output path based on whether this is the final level or a temporary level 
-        if level == 0:
-            # Final DSM folder 
-            dsm_dir = os.path.join(args.output_dir, "dsm")
-            os.makedirs(dsm_dir, exist_ok=True)
-            dsm_path = os.path.join(dsm_dir, f"{args.output_filename}.tif")
-        else:
-            # Temporary DSM folder 
-            dsm_dir = os.path.join(args.output_dir, "temp_dsm")
-            dsm_path = os.path.join(dsm_dir, f"{args.output_filename}.tif")
+        reference_image_path = stereo_pairs_list[-1].ortho_reference_path
 
-        # Because we cropped self.final_dsm to match the reference image's size, they share the exact same spatial grid and projection!
-        reference_image_path = stereo_pairs_list[0].ortho_reference_path
-        
-        with rasterio.open(reference_image_path) as reference_src:
-            # Copy the reference image's metadata profile (CRS, bounds, etc.)
-            profile = reference_src.profile
+        with rasterio.open(reference_image_path) as ref:
+            src_crs = ref.crs
+            src_transform = ref.transform
+            width = ref.width
+            height = ref.height
 
-            profile.update(
-                dtype=rasterio.float32,
-                count=1,
-                compress='lzw',
-                nodata=-9999.0  # Tell QGIS to treat -9999.0 as transparent NoData!
-            )
-            
-        with rasterio.open(dsm_path, 'w', **profile) as dst:
+        profile = {
+            "driver": "GTiff",
+            "height": height,
+            "width": width,
+            "count": 1,
+            "dtype": "float32",
+            "crs": src_crs,
+            "transform": src_transform,
+            "nodata": -9999.0,
+            "compress": "lzw",
+            "tiled": True,
+            "blockxsize": 256,
+            "blockysize": 256,
+        }
+
+        elev.clear()
+
+        with rasterio.open(dsm_path, "w", **profile) as dst:
             dst.write(self.final_dsm, 1)
 
+        geom_path = os.path.splitext(dsm_path)[0] + ".geom"
+        reference_geom.save_to_file(geom_path)
+
         print(f"DSM is georeferenced and saved successfully: {dsm_path}\n")
-   
 
     # =============================================
     # "Private" methods (prefixed with _ in Python)
     # =============================================
+
+    def _generate_rasterio_to_ossim_geom(self, tif_path: str, geom_path: str) -> None:
+        """
+        Generate a minimal UTM zone 32N .geom file using rasterio
+        """
+
+        # https://rasterio.readthedocs.io/en/stable/topics/georeferencing.html
+        with rasterio.open(tif_path) as src:
+            transform = src.transform
+
+        # Upper-Left tie point (Easting, Northing in meters)
+        ul_x = transform.c  
+        ul_y = transform.f  
+
+        # Pixel resolution (meters per pixel)
+        pixel_x = abs(transform.a)
+        pixel_y = abs(transform.e)
+
+        with open(geom_path, "w") as f:
+            f.write("projection.type: ossimUtmProjection\n")
+            f.write("projection.datum: WGE\n")
+            f.write("projection.zone: 32\n")
+            f.write("projection.hemisphere: N\n")
+            f.write("projection.pixel_scale_units: meters\n")
+            f.write(f"projection.pixel_scale_xy: ({pixel_x},{pixel_y})\n")
+            f.write("projection.tie_point_units: meters\n")
+            f.write(f"projection.tie_point_xy: ({ul_x},{ul_y})\n")
+            f.write("type: ossimImageGeometry\n")
     
+
     def _image_conversion_to_array(self, ortho_reference_path: str, ortho_target_path: str) -> bool:
         """
         Open ortho images and convert them to OpenCV format (NumPy arrays)
@@ -244,6 +295,8 @@ class DisparityMerging:
         self.ortho_rows, self.ortho_cols = self.reference_array.shape[:2]
         # print(self.reference_array)
         # print(self.ortho_rows, self.ortho_cols)
+        # print(self.reference_array.dtype)
+        # print(self.target_array.dtype)
 
         print(f"OSSIM->NumPy array conversion is done.\n")
 

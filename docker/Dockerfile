@@ -42,15 +42,21 @@ RUN git clone https://github.com/ossimlabs/ossim-plugins.git
 # 3. Build OSSIM Core
 WORKDIR /usr/local/src/ossim/scripts
 RUN BUILD_JPEG12_PLUGIN=OFF BUILD_GDAL_PLUGIN=ON BUILD_CNES_PLUGIN=ON ./build.sh
-
-RUN echo "plugin.file1: /usr/local/src/build/lib/libossim_cnes_plugin.so" > /usr/local/src/ossim_preferences.txt && \
-	echo "plugin.file2: /usr/local/src/build/lib/libossim_gdal_plugin.so" >> /usr/local/src/ossim_preferences.txt && \
-    echo "elevation_manager.elevation_source0.enabled: true" >> /usr/local/src/ossim_preferences.txt && \
-    echo "elevation_manager.elevation_source0.type: image_directory" >> /usr/local/src/ossim_preferences.txt && \
-    echo "elevation_manager.elevation_source0.connection_string: /opt/data/ossim/dsm" >> /usr/local/src/ossim_preferences.txt && \	
-	echo "elevation_manager.elevation_source0.geoid.type: geoid1996" >> /usr/local/src/ossim_preferences.txt && \
-	echo "elevation_manager.use_geoid_if_null: true" >> /usr/local/src/ossim_preferences.txt && \
-	echo "geoid_egm_96_grid: /opt/data/ossim/geoid/egm96.grd" >> /usr/local/src/ossim_preferences.txt 
+	
+RUN cat <<'EOF' > /usr/local/src/ossim_preferences.txt
+plugin.file1: /usr/local/src/build/lib/libossim_cnes_plugin.so
+plugin.file2: /usr/local/src/build/lib/libossim_gdal_plugin.so
+elevation_manager.elevation_source0.enabled: true
+elevation_manager.elevation_source0.type: image_directory
+elevation_manager.elevation_source0.connection_string: /opt/data/ossim/output/temp_dsm
+elevation_manager.elevation_source0.geoid.type: geoid1996
+elevation_manager.elevation_source1.enabled: true
+elevation_manager.elevation_source1.type: image_directory
+elevation_manager.elevation_source1.connection_string: /opt/data/ossim/dsm
+elevation_manager.elevation_source1.geoid.type: geoid1996
+elevation_manager.use_geoid_if_null: true
+geoid_egm_96_grid: /opt/data/ossim/geoid/egm96.grd
+EOF
 
 ENV OSSIM_PREFS_FILE=/usr/local/src/ossim_preferences.txt
 ENV PATH="/usr/local/src/build/bin:${PATH}"

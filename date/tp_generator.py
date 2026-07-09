@@ -34,7 +34,7 @@ class TiePointsGenerator:
         
         self._tp_draw(id_reference, id_target, level)
 
-        success = self._tp_warp(index_pair, id_target, level)
+        success = self._tp_warp(index_pair, id_reference, id_target, level)
 
         return success
 
@@ -337,7 +337,7 @@ class TiePointsGenerator:
         return transformation_matrix
  
 
-    def _tp_warp(self, index_pair: int, id_target: int, level: int) -> bool:
+    def _tp_warp(self, index_pair: int, id_reference: int, id_target: int, level: int) -> bool:
         """
         Warp the target image using the estimated transformation matrix
         """
@@ -356,7 +356,7 @@ class TiePointsGenerator:
             target_points.append(target_pixel_coords)
 
         # Estimate the quasi-epipolar transformation model
-        self.transformation_matrix = self._estimate_transformation_matrix(reference_points, target_points)
+        self.transformation_matrix = self._estimate_transformation_matrix(target_points, reference_points)
 
         if self.transformation_matrix is None:
             print("ERROR: Transformation matrix cannot be estimated!")
@@ -371,6 +371,8 @@ class TiePointsGenerator:
         # Save aligned images
         os.makedirs("/opt/data/ossim/output/warped/", exist_ok=True)
         target_name = f"target_aligned_level_{level}_pair_{index_pair}_id_{id_target}.tif"
+        reference_name = f"reference_level_{level}_pair_{index_pair}_id_{id_reference}.tif"
         cv2.imwrite("/opt/data/ossim/output/warped/"+target_name, self.target_array_warped)
+        cv2.imwrite("/opt/data/ossim/output/warped/"+reference_name, self.reference_array)
 
         return True

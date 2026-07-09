@@ -2,7 +2,7 @@ import sys
 import argparse
 import os
 import time
-
+import shutil
 import pyossim
 
 from .images_config import ImagesConfig
@@ -124,39 +124,54 @@ def main():
         print(f"Rotation angle of the pair {stereo_pair.id_reference} | {stereo_pair.id_target}: {stereo_pair.mean_rotation_angle}\n")
 
     kwl = {
-        "meters": configuration.meters,
-        "cut_min_lat": configuration.min_lat,
-        "cut_max_lat": configuration.max_lat,  
-        "cut_min_lon": configuration.min_lon,      
-        "cut_max_lon": configuration.max_lon,        
+        "cut_min_lat": str(configuration.min_lat),
+        "cut_max_lat": str(configuration.max_lat),  
+        "cut_min_lon": str(configuration.min_lon),      
+        "cut_max_lon": str(configuration.max_lon),   
         "operation": "ortho",
-        "resampler_filter": "box",
-        "projection": "utm"
+        "resampler_filter": "box", # https://manpages.debian.org/experimental/ossim-core/ossim-chipper.1.en.html => ossim-info --resampler-filters
+        # "projection": "geo-scaled"
+        "projection": "utm",
+        "zone": "32",
+        "hemisphere": "N"
     }
+    
+    srtm_dir = "/opt/data/ossim/dsm"
+    srtm_path_cache = os.path.join(srtm_dir, "elev_cell_map.kwl")
+    temp_dsm_dir = os.path.join(args.output_dir, "temp_dsm")
+    final_dsm_dir = os.path.join(args.output_dir, "dsm")
+    if os.path.exists(srtm_path_cache):
+        os.remove(srtm_path_cache)
+    if os.path.exists(temp_dsm_dir):
+        shutil.rmtree(temp_dsm_dir)
+    os.makedirs(temp_dsm_dir)
+    if os.path.exists(final_dsm_dir):
+        shutil.rmtree(final_dsm_dir)
+    os.makedirs(final_dsm_dir)
 
     # Pyramidal iteration
     for l in range(configuration.number_levels-1, -1, -1):
-        os.makedirs("/opt/data/ossim/output/temp_dsm/", exist_ok=True)
-        temp_dsm_path = os.path.join(args.output_dir, "temp_dsm")
         elev = pyossim.ossim_elev_manager.instance()
 
         if l != configuration.number_levels - 1:
-            elev.load_elevation_path(str(temp_dsm_path), True)
+            elev.clear()
+            elev.load_elevation_path(srtm_dir, True)   
+            elev.load_elevation_path(str(temp_dsm_dir), True)
 
         print(f"*************************************\n")
         print(f"LEVEL: {l}")
-        # print(f"Temporary DSM path: {temp_dsm_path}")
-        # print(f"Number of elevation databases: {elev.getNumberOfElevationDatabases()}")
 
-        # gpt = pyossim.ossim_gpt(46.07334640, 11.12284482, 0.00)
-        # orthometric_height = elev.get_height_above_msl(gpt)
-        # ellipsoidal_height = elev.get_height_above_ellipsoid(gpt)
-        # print(f"Orthometric height (SRTM only): {orthometric_height} meters")
-        # print(f"Ellipsoidal height (SRTM + EGM96): {ellipsoidal_height} meters")
-        # print(f"Geoid offset: {ellipsoidal_height - orthometric_height} meters")   
+        print(f"Number of elevation databases: {elev.get_number_of_elevation_databases()}")
+
+        gpt = pyossim.ossim_gpt(46.054, 11.125, 0.00)
+        orthometric_height = elev.get_height_above_msl(gpt)
+        ellipsoidal_height = elev.get_height_above_ellipsoid(gpt)
+        print(f"Orthometric height (SRTM/temp DSM only): {orthometric_height} meters")
+        print(f"Ellipsoidal height (SRTM/temp DSM + EGM96): {ellipsoidal_height} meters")
+        print(f"Geoid offset: {ellipsoidal_height - orthometric_height} meters")   
 
         ortho_res = configuration.meters * (2 ** l)
-        kwl["meters"] = ortho_res
+        kwl["meters"] = str(ortho_res)
 
         print(f"{ortho_res} m: resolution of this level")
         print(f"{configuration.meters} m: final DSM resolution\n")        
@@ -164,7 +179,7 @@ def main():
         ortho_images_dict = {}
 
         for n in range(int(images_number)):
-            kwl["image1.file"] = images_list[n].raw_image_path
+            kwl["image0.file"] = images_list[n].raw_image_path
 
             raw_image_id = images_list[n].raw_image_id
             ortho_file_name = f"ortho_image_level_{l}_id_{raw_image_id}.tif"
