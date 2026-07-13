@@ -8,5 +8,7 @@ python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output 
 
 python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm --number-levels 3 --meters 1 --cut-extent-ll 46.046 46.063 11.113 11.158
 
+python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm --number-levels 3 --meters 1 --cut-extent-ll 46.053 46.055 11.10 11.12
+
 Very small area:
 python3 -m date.main date/input_images_configuration.txt /opt/data/ossim/output dsm --number-levels 3 --meters 1 --cut-extent-ll 46.053 46.056 11.123 11.128

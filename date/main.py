@@ -130,10 +130,10 @@ def main():
         "cut_max_lon": str(configuration.max_lon),   
         "operation": "ortho",
         "resampler_filter": "box", # https://manpages.debian.org/experimental/ossim-core/ossim-chipper.1.en.html => ossim-info --resampler-filters
-        # "projection": "geo-scaled"
         "projection": "utm",
         "zone": "32",
-        "hemisphere": "N"
+        "hemisphere": "N",
+        "snap_tie_to_origin": "true" # Ensure grid alignment
     }
     
     srtm_dir = "/opt/data/ossim/dsm"

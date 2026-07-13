@@ -87,13 +87,13 @@ class TiePointsGenerator:
         print(f"Initial maximum match distance: {max_dist}")
         print(f"Initial minimum match distance: {min_dist}")
 
-        # Perform a numerical binary search (bisection) to find the exact distance threshold that retains 1% of the matches and discards the rest
+        # Perform a numerical binary search (bisection) to find the exact distance threshold that retains 2% of the matches and discards the rest
         total_reference_features = len(self.keypoints_reference)
         distance_cutoff_threshold = (max_dist + min_dist) / 2.0
         retained_matches_ratio = 1.0  # placeholder that represents 100%
         search_iter = 0
 
-        while abs(retained_matches_ratio - 0.01) > 0.001 and search_iter <= 200:
+        while abs(retained_matches_ratio - 0.02) > 0.001 and search_iter <= 200:
             retained_matches_count = 0
             for match in matches:
                 if match.distance <= distance_cutoff_threshold:
@@ -102,7 +102,7 @@ class TiePointsGenerator:
             # Calculate the ratio of matches we are keeping
             retained_matches_ratio = retained_matches_count / total_reference_features if total_reference_features > 0 else 0.0
             
-            if retained_matches_ratio >= 0.01:
+            if retained_matches_ratio >= 0.02:
                 # We kept too many matches, so we shrink the threshold ceiling
                 max_dist = distance_cutoff_threshold
             else:
@@ -132,7 +132,7 @@ class TiePointsGenerator:
                 if abs(vertical_parallax) < 100.0:
                     self.good_matches.append(match)
 
-        print(f"Number of good matches after removing the most distant features (99%) and features with vertical parallax in y-axis > 100: {len(self.good_matches)}")
+        print(f"Number of good matches after removing the most distant features (98%) and features with vertical parallax in y-axis > 100: {len(self.good_matches)}")
         print(f"Percentage of points found: {((len(self.good_matches) / len(matches)) * 100.0):.1f}\n")
        
         # The 3-sigma iterative outlier test

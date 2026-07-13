@@ -22,6 +22,7 @@ class DisparityMerging:
         self.target_array_uint8: np.ndarray | None = None               
         
         self.reference_handler: pyossim.ossim_image_handler | None = None
+        self.target_handler: pyossim.ossim_image_handler | None = None
 
         self.ortho_rows: int | None = None              
         self.ortho_cols: int | None = None     
@@ -37,16 +38,22 @@ class DisparityMerging:
             print(f"PAIR TO PROCESS => Reference: {pair.id_reference} | Target: {pair.id_target}\n")
 
             reference_image_path = stereo_pairs_list[n].ortho_reference_path
+            target_image_path = stereo_pairs_list[n].ortho_target_path
 
             # UTM settings
-            input_geom_path = os.path.splitext(reference_image_path)[0] + ".geom"            
-            self._generate_rasterio_to_ossim_geom(reference_image_path, input_geom_path)
+            reference_geom_path = os.path.splitext(reference_image_path)[0] + ".geom"            
+            self._generate_rasterio_to_ossim_geom(reference_image_path, reference_geom_path)
+            target_geom_path = os.path.splitext(target_image_path)[0] + ".geom"            
+            self._generate_rasterio_to_ossim_geom(target_image_path, target_geom_path)
 
             registry = pyossim.ossim_image_handler_registry.instance()
             self.reference_handler = registry.open(reference_image_path)
-            # These two lines can be moved to compute_dsm if geo-scaled is used            
+            self.target_handler = registry.open(target_image_path)
+          
             self.reference_handler.get_image_geometry()
             self.reference_handler.save_image_geometry()
+            self.target_handler.get_image_geometry()
+            self.target_handler.save_image_geometry()
 
             self._image_conversion_to_array(pair.ortho_reference_path, pair.ortho_target_path)
 
@@ -164,11 +171,14 @@ class DisparityMerging:
         reference_geom = self.reference_handler.get_image_geometry()
 
         # Create an 8-bit visualization of the merged disparity map before adding coarse elevation
-        min_val, max_val, _, _ = cv2.minMaxLoc(self.merged_disp)
+        valid_mask_bool = self.merged_disp >= -9000 
+        valid_mask = valid_mask_bool.astype(np.uint8)
+        min_val, max_val, _, _ = cv2.minMaxLoc(self.merged_disp, mask=valid_mask)
         diff = max_val - min_val
-        scale = 255.0 / diff if diff > 0 else 1.0        
+        scale = 254.0 / diff if diff > 0 else 1.0        
 
-        merged_disp_computed_0 = np.clip((self.merged_disp - min_val) * scale, 0, 255).astype(np.uint8)
+        merged_disp_computed_0 = np.clip((self.merged_disp - min_val) * scale + 1, 1, 255).astype(np.uint8)
+        merged_disp_computed_0[~valid_mask_bool] = 0
         
         debug_name_0 = f"6_merged_disparity_before_elevation_level_{level}.tif"
         debug_path_0 = os.path.join(args.output_dir, "disparity_maps", debug_name_0)
@@ -200,11 +210,12 @@ class DisparityMerging:
                     self.merged_disp[i, j] = height_above_msl
 
         # Create an 8-bit visualization of the merged disparity map after adding coarse elevation
-        min_val, max_val, _, _ = cv2.minMaxLoc(self.merged_disp)
+        min_val, max_val, _, _ = cv2.minMaxLoc(self.merged_disp, mask=valid_mask)
         diff = max_val - min_val
-        scale = 255.0 / diff if diff > 0 else 1.0        
+        scale = 254.0 / diff if diff > 0 else 1.0        
 
-        merged_disp_computed_1 = np.clip((self.merged_disp - min_val) * scale, 0, 255).astype(np.uint8)
+        merged_disp_computed_1 = np.clip((self.merged_disp - min_val) * scale + 1, 1, 255).astype(np.uint8)
+        merged_disp_computed_1[~valid_mask_bool] = 0
         
         debug_name_1 = f"7_merged_disparity_after_elevation_level_{level}.tif"
         debug_path_1 = os.path.join(args.output_dir, "disparity_maps", debug_name_1)
@@ -246,6 +257,7 @@ class DisparityMerging:
         reference_geom.save_to_file(geom_path)
 
         print(f"DSM is georeferenced and saved successfully: {dsm_path}\n")
+
 
     # =============================================
     # "Private" methods (prefixed with _ in Python)
